@@ -1,0 +1,123 @@
+---
+title: "Static site generation"
+description: "Pre-render all pages to static HTML at build time"
+---
+
+devix can pre-render your entire site to static HTML at build time. The result is a directory of `.html` files you can serve from any CDN or static host with no server required.
+
+## Configuration
+
+Set `output: 'static'` in your devix config to enable static generation.
+
+```ts
+// devix.config.ts
+export default defineConfig({
+  output: 'static',
+})
+```
+
+## Generate workflow
+
+<Steps>
+  <Step title="Run the generate command">
+    ```bash
+    npx devix generate
+    ```
+  </Step>
+  <Step title="devix builds the project">
+    Vite compiles both the client and server bundles.
+  </Step>
+  <Step title="devix discovers static routes">
+    All files in `app/pages/` without dynamic segments are collected automatically.
+  </Step>
+  <Step title="Dynamic routes are expanded">
+    devix calls `generateStaticParams()` on every dynamic route file to get all param combinations.
+  </Step>
+  <Step title="Pages are rendered and written">
+    Each page is server-rendered and written to `dist/client/` as a static `.html` file.
+  </Step>
+</Steps>
+
+## Static routes
+
+Pages without dynamic segments are included automatically — no extra configuration needed.
+
+```
+app/pages/index.tsx       → dist/client/index.html
+app/pages/about.tsx       → dist/client/about/index.html
+app/pages/blog/index.tsx  → dist/client/blog/index.html
+```
+
+## Dynamic routes
+
+For dynamic routes, export `generateStaticParams()` with all the param combinations you want to pre-render.
+
+```tsx
+// app/pages/blog/[slug].tsx
+export async function generateStaticParams() {
+  const posts = await db.posts.all()
+  return posts.map(p => ({ slug: p.slug }))
+}
+
+export async function loader({ params }: LoaderContext<{ slug: string }>) {
+  return db.posts.findBySlug(params.slug)
+}
+
+export default function Post({ data }: PageProps<typeof loader>) {
+  return <article>{data.title}</article>
+}
+```
+
+<Warning>
+  Dynamic routes without a `generateStaticParams()` export are skipped entirely during generation.
+</Warning>
+
+## Multiple params
+
+For routes with more than one dynamic segment, return objects with all the param keys.
+
+```ts
+// app/pages/[category]/[slug].tsx
+export async function generateStaticParams() {
+  return [
+    { category: 'news', slug: 'breaking-story' },
+    { category: 'tech', slug: 'ai-updates' },
+  ]
+}
+```
+
+## Loaders at build time
+
+Loaders run at **generation time**, not at request time. They have full access to your database, internal APIs, and the filesystem. The result is serialized directly into the generated HTML.
+
+## Serving the output
+
+<Tabs>
+  <Tab title="devix">
+    Use the built-in static server for local preview or simple deployments:
+
+    ```bash
+    npx devix start  # serves dist/client/ without SSR
+    ```
+  </Tab>
+  <Tab title="Netlify / Cloudflare Pages">
+    Point your deployment to the `dist/client/` directory. No additional configuration is needed for SPAs — devix generates one HTML file per route.
+  </Tab>
+  <Tab title="S3 / object storage">
+    Upload the contents of `dist/client/` to your bucket and enable static website hosting. Set the index document to `index.html`.
+  </Tab>
+</Tabs>
+
+## Limitations
+
+<AccordionGroup>
+  <Accordion title="No API routes">
+    API routes require a running server and are not available with `output: 'static'`. Any code in `app/api/` is ignored during static generation.
+  </Accordion>
+  <Accordion title="No cookie or auth-dependent pages">
+    Pages that depend on cookies, session tokens, or per-request headers cannot be pre-rendered. The HTML is generated once at build time and served identically to every visitor.
+  </Accordion>
+  <Accordion title="No user-specific content">
+    Content that differs per user must be fetched from the client after the initial HTML is loaded. Use `useEffect` or a data-fetching library to load personalized data at runtime.
+  </Accordion>
+</AccordionGroup>

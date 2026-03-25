@@ -1,0 +1,170 @@
+---
+title: "Cookies and authentication"
+description: "Manage cookies and protect routes with server-side guards"
+---
+
+devix exposes three cookie helpers — `getCookie`, `setCookie`, and `deleteCookie` — imported directly from `@devlusoft/devix`. Use them in API route handlers, middleware, and loaders to implement session-based authentication.
+
+## Cookie API
+
+### getCookie
+
+Read a cookie value from an incoming request.
+
+```ts
+import { getCookie } from '@devlusoft/devix'
+
+const token = getCookie(req, 'session')
+// Returns string | undefined
+```
+
+### setCookie
+
+Write a cookie onto a response's `Headers` object.
+
+```ts
+import { setCookie } from '@devlusoft/devix'
+
+setCookie(headers, 'session', token, {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'Lax',       // 'Strict' | 'Lax' | 'None'
+  maxAge: 60 * 60 * 24 * 7,  // seconds — 7 days
+})
+```
+
+<AccordionGroup>
+  <Accordion title="CookieOptions reference">
+    | Option | Type | Description |
+    |---|---|---|
+    | `httpOnly` | `boolean` | Blocks JavaScript access to the cookie |
+    | `secure` | `boolean` | Sends cookie only over HTTPS |
+    | `sameSite` | `'Strict' \| 'Lax' \| 'None'` | Cross-site sending policy |
+    | `maxAge` | `number` | Lifetime in seconds |
+    | `path` | `string` | URL path the cookie applies to |
+    | `domain` | `string` | Domain the cookie applies to |
+  </Accordion>
+</AccordionGroup>
+
+### deleteCookie
+
+Expire a cookie immediately by name.
+
+```ts
+import { deleteCookie } from '@devlusoft/devix'
+
+deleteCookie(headers, 'session')
+```
+
+## Complete authentication flow
+
+<Steps>
+  <Step title="Create the login endpoint">
+    Create `app/api/auth/login.ts`. On a successful credential check, call `setCookie` to write a session token onto the response headers.
+
+    ```ts
+    import { json, setCookie, type RouteHandler } from '@devlusoft/devix'
+
+    export const POST: RouteHandler = async (ctx, req) => {
+      const { email, password } = await req.json()
+      const token = await createSession(email, password)
+
+      if (!token) return json({ error: 'Invalid credentials' }, 401)
+
+      const res = json({ ok: true })
+      setCookie(res.headers, 'session', token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'Lax',
+        maxAge: 60 * 60 * 24 * 7,
+      })
+      return res
+    }
+    ```
+  </Step>
+
+  <Step title="Create the logout endpoint">
+    Create `app/api/auth/logout.ts`. Call `deleteCookie` to clear the session.
+
+    ```ts
+    import { json, deleteCookie, type RouteHandler } from '@devlusoft/devix'
+
+    export const DELETE: RouteHandler = async (ctx, req) => {
+      const res = json({ ok: true })
+      deleteCookie(res.headers, 'session')
+      return res
+    }
+    ```
+  </Step>
+
+  <Step title="Protect pages with guard()">
+    Export a `guard` function from any page that requires authentication. It runs before the loader — if it returns a path string, devix redirects immediately without running the loader.
+
+    ```ts
+    import { getCookie, type LoaderContext } from '@devlusoft/devix'
+
+    export async function guard({ request }: LoaderContext) {
+      const token = getCookie(request, 'session')
+      const session = token ? await verifyToken(token) : null
+      if (!session) return '/login'
+      return null
+    }
+
+    export async function loader({ request }: LoaderContext) {
+      const token = getCookie(request, 'session')!
+      return getUser(token)
+    }
+    ```
+  </Step>
+
+  <Step title="Protect API directories with middleware">
+    Create `app/api/middleware.ts` (or a nested `app/api/v1/middleware.ts`) to authenticate all handlers in that directory and its subdirectories. Return `null` to continue, or a `Response` to short-circuit.
+
+    ```ts
+    import { getCookie, type MiddlewareModule } from '@devlusoft/devix'
+
+    export const middleware: MiddlewareModule['middleware'] = async (ctx, req) => {
+      const token = getCookie(req, 'session')
+      if (!token) return new Response('Unauthorized', { status: 401 })
+
+      const user = await verifyToken(token)
+      if (!user) return new Response('Unauthorized', { status: 401 })
+
+      ctx.set('user', user)
+      return null
+    }
+    ```
+
+    Downstream handlers retrieve the validated user from context:
+
+    ```ts
+    import { type RouteHandler } from '@devlusoft/devix'
+
+    export const GET: RouteHandler = async (ctx) => {
+      const user = ctx.get<User>('user')
+      return { id: user.id, email: user.email }
+    }
+    ```
+  </Step>
+
+  <Step title="Call the endpoints from the client">
+    Use `$fetch` to log in and log out with full type safety.
+
+    ```ts
+    import { $fetch } from '@devlusoft/devix'
+
+    // Login
+    await $fetch('/api/auth/login', {
+      method: 'POST',
+      body: { email: 'user@example.com', password: 'secret' },
+    })
+
+    // Logout
+    await $fetch('/api/auth/logout', { method: 'DELETE' })
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  Always set `httpOnly: true` on session cookies so they cannot be read by client-side JavaScript. Combine with `secure: true` in production to prevent transmission over plain HTTP.
+</Warning>

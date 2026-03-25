@@ -1,0 +1,119 @@
+---
+title: "Data loading"
+description: "Fetch server-side data with full type inference"
+---
+
+devix runs `loader` on the server before rendering. The return value is serialized and passed as `data` to the page component, with full TypeScript inference.
+
+## loader function
+
+<Tabs>
+  <Tab title="Loader on a page">
+    ```tsx
+    import type { PageProps, LoaderContext } from '@devlusoft/devix'
+
+    export async function loader({ params, request }: LoaderContext) {
+      return db.posts.findBySlug(params.slug)
+    }
+
+    export default function Post({ data }: PageProps<typeof loader>) {
+      return <h1>{data.title}</h1>
+    }
+    ```
+
+    Use `PageProps<typeof loader>` to infer the `data` type directly from your loader's return value — no manual typing needed.
+  </Tab>
+  <Tab title="Loader on a layout">
+    ```tsx
+    import type { LayoutProps, LoaderContext } from '@devlusoft/devix'
+
+    export async function loader({ request }: LoaderContext) {
+      return { user: await getUser(request) }
+    }
+
+    export default function RootLayout({ children, data }: LayoutProps<{ user: User }>) {
+      return (
+        <div>
+          <header>{data.user?.name}</header>
+          {children}
+        </div>
+      )
+    }
+    ```
+
+    Layout loaders run in parallel with the page loader. They do not block each other.
+  </Tab>
+</Tabs>
+
+## useLoaderData
+
+Access loader data from any component in the render tree, not just the page root.
+
+```tsx
+import { useLoaderData } from '@devlusoft/devix'
+
+function Author() {
+  const { author } = useLoaderData<{ author: string }>()
+  return <span>{author}</span>
+}
+```
+
+## useParams
+
+Read URL params from any component without prop-drilling.
+
+```tsx
+import { useParams } from '@devlusoft/devix'
+
+const { slug } = useParams<{ slug: string }>()
+```
+
+## guard function
+
+`guard` runs **before** the loader. Return a route string to redirect, or `null` to continue. Use it to protect pages that require authentication.
+
+```ts
+export async function guard({ request }: LoaderContext) {
+  const session = await getSession(request)
+  if (!session) return '/login'
+  return null
+}
+```
+
+<Tip>
+  Guard data is available to the loader via `ctx.guardData`. Use `LoaderContextWithGuard` to type it when the guard returns a non-redirect value.
+</Tip>
+
+## Loader timeout
+
+Configure a global timeout for all loaders in `devix.config.ts`. Accepts milliseconds or a duration string.
+
+```ts
+export default defineConfig({
+  loaderTimeout: '5s',  // ms | s | m | h
+})
+```
+
+The default is `10s`. If a loader exceeds the timeout, the request fails with a controlled error response.
+
+## Client navigation
+
+When the user navigates with `<Link>` or `useNavigate()`, devix fetches only the data for the new page via the `/_data` internal endpoint — no full page reload occurs. The page component re-renders with the new data in place.
+
+<Note>
+  The `/_data` route is internal to devix. You do not need to create or configure it.
+</Note>
+
+## DevixError
+
+Throw `DevixError` to return a specific HTTP status code from a loader. Unhandled errors automatically return `500`.
+
+```ts
+import { DevixError } from '@devlusoft/devix'
+
+export async function loader({ params }: LoaderContext) {
+  const post = await db.posts.find(params.id)
+  if (!post) throw new DevixError(404, 'Post not found')
+  return post
+}
+```

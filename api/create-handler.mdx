@@ -1,0 +1,149 @@
+---
+title: "createHandler"
+description: "Define typed API route handlers with automatic body parsing and end-to-end type inference"
+---
+
+`createHandler` is the recommended way to define API route handlers. It infers the request body type and return type automatically, enabling end-to-end type safety with `$fetch`.
+
+```ts
+import { createHandler } from '@devlusoft/devix'
+```
+
+## Signature
+
+```ts
+function createHandler<TFn extends (...args: any[]) => any>(
+  fn: TFn,
+): DevixHandler<ExtractBody<TFn>, Awaited<ReturnType<TFn>>>
+```
+
+<ParamField path="fn" type="(body: T) => Promise<Result>" required>
+  The handler function. The type annotation on its first parameter defines the expected request body type. Omit the parameter entirely for handlers that receive no body (e.g. GET).
+</ParamField>
+
+<ResponseField name="returns" type="DevixHandler<TBody, TReturn>">
+  A branded handler object that devix mounts as an HTTP endpoint. The `TBody` and `TReturn` type parameters are consumed by `$fetch` for end-to-end type inference.
+</ResponseField>
+
+<Note>
+  The body parameter type annotation **defines** the expected body type — you do not pass a generic argument to `createHandler` itself. TypeScript infers both types from the function signature.
+</Note>
+
+---
+
+## Automatic body parsing
+
+Devix inspects the incoming `Content-Type` header and parses the body before passing it to your handler:
+
+| Content-Type | Parsing method |
+|---|---|
+| `application/json` | `req.json()` |
+| `multipart/form-data` | `req.formData()` |
+| `application/x-www-form-urlencoded` | `req.formData()` |
+| anything else | `req.text()` |
+
+If JSON parsing fails or the handler throws an unexpected error, devix returns `500` automatically.
+
+---
+
+## Examples
+
+### GET handler (no body)
+
+```ts
+// app/api/auth/status.ts
+import { createHandler, json } from '@devlusoft/devix'
+
+export const GET = createHandler(async () => {
+  return json({ status: 'ok' })
+})
+```
+
+### POST handler with typed body
+
+```ts
+// app/api/auth/login.ts
+import { createHandler, json } from '@devlusoft/devix'
+
+export const POST = createHandler(async (body: { email: string; password: string }) => {
+  const token = await createSession(body.email, body.password)
+  if (!token) return json({ error: 'Invalid credentials' }, 401)
+  return json({ ok: true })
+})
+```
+
+### DELETE handler returning null (204)
+
+```ts
+// app/api/posts/[id].ts
+import { createHandler } from '@devlusoft/devix'
+import { useParams } from '@devlusoft/devix/server'
+
+export const DELETE = createHandler(async () => {
+  const { id } = useParams()
+  await db.posts.delete(id)
+  return null  // devix sends 204 No Content
+})
+```
+
+### Validation with DevixError
+
+```ts
+import { createHandler, json, DevixError } from '@devlusoft/devix'
+
+export const POST = createHandler(async (body: { email: string }) => {
+  if (!body.email) throw new DevixError(400, 'email is required')
+  return json({ ok: true })
+})
+```
+
+---
+
+## Return types
+
+| Return value | HTTP result |
+|---|---|
+| Plain object or array | `200` with `Content-Type: application/json` |
+| `json(data, status)` | JSON with a custom status code |
+| `text(body, status)` | `text/plain` |
+| `new Response(...)` | Full control over the response |
+| `null` / `void` | `204 No Content` |
+
+---
+
+## End-to-end type inference with $fetch
+
+`$fetch` reads the `TBody` and `TReturn` type parameters from `DevixHandler` to enforce the correct body shape and to type the response automatically:
+
+```ts
+// client code
+import { $fetch } from '@devlusoft/devix'
+
+// TypeScript enforces the body type and infers the response type
+const res = await $fetch('/api/auth/login', {
+  method: 'POST',
+  body: { email: 'user@example.com', password: '1234' },
+})
+// typeof res is inferred from the handler's return type
+```
+
+If `body` does not match the expected type, TypeScript reports an error at compile time.
+
+---
+
+## DevixHandler type
+
+```ts
+export interface DevixHandler<TBody = undefined, TReturn = unknown> {
+  readonly [HANDLER_BRAND]: true
+  readonly fn: (...args: any[]) => any
+  readonly __body: TBody
+  readonly __return: TReturn
+}
+```
+
+`HANDLER_BRAND` is a unique symbol used internally by devix to distinguish `DevixHandler` objects from plain `RouteHandler` functions. You do not interact with it directly.
+
+<Tip>
+  You can also define handlers as plain `RouteHandler` functions when you need direct access to `ctx` and `req`. See the [API routes guide](/concepts/api-routes) for the classic handler signature.
+</Tip>

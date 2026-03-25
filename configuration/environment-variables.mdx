@@ -1,0 +1,109 @@
+---
+title: "Environment variables"
+description: "Expose environment variables to the client and server"
+---
+
+devix follows the same `.env` file conventions as Vite. Variables with a configured prefix are exposed to the browser; all other variables remain server-only.
+
+## Supported .env files
+
+devix loads environment variables from these files in your project root:
+
+```
+.env
+.env.local
+.env.production
+.env.development
+```
+
+`.env.local` is intended for secrets and is gitignored by default. Mode-specific files (`.env.production`, `.env.development`) are loaded based on the current command.
+
+## Client vs. server variables
+
+The `envPrefix` option in `devix.config.ts` controls which variables are bundled into the client. Variables whose names start with the configured prefix are included in the client bundle and accessible via `import.meta.env`. All other variables are stripped from the client bundle and remain server-only.
+
+The default prefix is `'VITE_'`. The example below uses `'PUBLIC_'`:
+
+```ts devix.config.ts
+import { defineConfig } from '@devlusoft/devix/config'
+
+export default defineConfig({
+    envPrefix: 'PUBLIC_',
+})
+```
+
+With this config, a `.env` file might look like:
+
+```bash .env
+# Server-only — never sent to the browser
+DATABASE_URL=postgres://user:password@localhost/mydb
+SESSION_SECRET=supersecretvalue
+
+# Exposed to the client
+PUBLIC_API_URL=https://api.example.com
+PUBLIC_APP_NAME=My App
+```
+
+<Warning>
+  Never add a prefix to secrets like `DATABASE_URL` or `SESSION_SECRET`. Any variable with the configured prefix is embedded in the JavaScript bundle and visible to anyone who inspects it.
+</Warning>
+
+## Accessing variables
+
+<Tabs>
+  <Tab title="Server-side">
+    Server-only variables (no prefix) are available in loaders, guards, and API routes via `process.env` or `import.meta.env`.
+
+    ```ts app/api/db.ts
+    export async function GET() {
+        const db = await connect(process.env.DATABASE_URL)
+        const rows = await db.query('SELECT * FROM users')
+        return Response.json(rows)
+    }
+    ```
+
+    ```ts app/pages/dashboard.tsx
+    export async function loader() {
+        // import.meta.env also works on the server
+        const secret = import.meta.env.SESSION_SECRET
+        const session = await validateSession(secret)
+        return { user: session.user }
+    }
+    ```
+
+    <Note>
+      Server-side variables are never included in the client bundle, even when accessed via `import.meta.env`, as long as they do not carry the configured prefix.
+    </Note>
+  </Tab>
+  <Tab title="Client-side">
+    Prefixed variables are available anywhere in your React components via `import.meta.env`.
+
+    ```tsx app/pages/home.tsx
+    export default function Home() {
+        const apiUrl = import.meta.env.PUBLIC_API_URL
+        const appName = import.meta.env.PUBLIC_APP_NAME
+
+        return (
+            <div>
+                <h1>{appName}</h1>
+                <p>API: {apiUrl}</p>
+            </div>
+        )
+    }
+    ```
+
+    <Tip>
+      `import.meta.env` is statically replaced at build time, so values are inlined as string literals. Accessing `import.meta.env` dynamically (e.g. with a computed key) will not work.
+    </Tip>
+  </Tab>
+</Tabs>
+
+## Using multiple prefixes
+
+`envPrefix` also accepts an array of strings if you need more than one prefix:
+
+```ts devix.config.ts
+export default defineConfig({
+    envPrefix: ['PUBLIC_', 'NEXT_PUBLIC_'],
+})
+```

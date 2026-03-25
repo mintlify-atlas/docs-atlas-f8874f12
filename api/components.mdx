@@ -1,0 +1,119 @@
+---
+title: "Runtime components"
+description: "React components exported from @devlusoft/devix"
+---
+
+```ts
+import { Link, RouterProvider } from '@devlusoft/devix'
+```
+
+## Link
+
+A client-side navigation component that renders an `<a>` element. On click it intercepts the navigation and performs a client-side route transition instead of a full page load. All standard HTML anchor attributes are forwarded to the underlying `<a>` element.
+
+**Type signature**
+
+```ts
+interface LinkProps extends AnchorHTMLAttributes<HTMLAnchorElement> {
+  href: string
+  prefetch?: boolean
+  viewTransition?: boolean
+}
+
+function Link(props: LinkProps): JSX.Element
+```
+
+**Props**
+
+<ParamField path="href" type="string" required>
+  The destination path or URL. Relative paths are resolved against the current `window.location`. Absolute paths (starting with `/`) and full URLs (starting with `http`) are used as-is.
+</ParamField>
+
+<ParamField path="prefetch" type="boolean" default="false">
+  When `true`, the linked page's JavaScript chunk and its loader data are fetched when the user hovers over the link, reducing perceived navigation latency.
+</ParamField>
+
+<ParamField path="viewTransition" type="boolean" default="false">
+  When `true`, the navigation is wrapped in the browser's View Transition API (`document.startViewTransition`) if the browser supports it. Falls back to a standard navigation when not supported.
+</ParamField>
+
+**Additional props**
+
+All props from `AnchorHTMLAttributes<HTMLAnchorElement>` are accepted, including `className`, `target`, `rel`, `aria-*`, `data-*`, and event handlers. They are forwarded directly to the `<a>` element.
+
+<Note>
+  `Link` only intercepts left-clicks without modifier keys (Ctrl, Meta, Shift). Middle-clicks and modified clicks fall through to the browser's default behavior, preserving expected behaviour for "open in new tab".
+</Note>
+
+**Usage**
+
+```tsx
+import { Link } from '@devlusoft/devix'
+
+export default function Nav() {
+  return (
+    <nav>
+      {/* Basic navigation */}
+      <Link href="/about">About</Link>
+
+      {/* Prefetch on hover */}
+      <Link href="/blog" prefetch>
+        Blog
+      </Link>
+
+      {/* Animated transition */}
+      <Link href="/contact" viewTransition>
+        Contact
+      </Link>
+
+      {/* With standard anchor attributes */}
+      <Link
+        href="/docs"
+        prefetch
+        viewTransition
+        className="nav-link"
+        aria-label="Documentation"
+      >
+        Docs
+      </Link>
+    </nav>
+  )
+}
+```
+
+---
+
+## RouterProvider
+
+`RouterProvider` is the client-side runtime that powers all navigation in a devix application. It maintains the current route state (pathname, params, loader data, layouts) and provides it to the component tree via React context.
+
+**Type signature**
+
+```ts
+interface RouterProviderProps {
+  initialData: unknown
+  initialParams: Record<string, string>
+  initialPage: ComponentType<PageProps>
+  initialLayouts?: ComponentType<LayoutProps>[]
+  initialLayoutsData?: unknown[]
+  initialMeta?: Metadata | null
+  initialViewport?: Viewport
+  initialError?: ErrorProps
+  initialErrorPage?: ComponentType<ErrorProps>
+  clientEntry: string
+}
+
+function RouterProvider(props: RouterProviderProps): JSX.Element
+```
+
+<Warning>
+  `RouterProvider` is used internally by devix's SSR runtime. You do not mount it manually in your application code. It is documented here for framework integrators and contributors.
+</Warning>
+
+**Behaviour**
+
+- Renders the current page component inside any applicable layout components.
+- Listens for `popstate` events to handle browser back/forward navigation.
+- Exposes `navigate` and `revalidate` to descendant components via [`useNavigate`](/api/hooks) and [`useRevalidate`](/api/hooks).
+- Supports error pages: renders `ErrorPage` with `statusCode` and `message` when a navigation results in a 4xx or 5xx response.
+- Hydrates metadata and viewport settings via an internal `HeadSlot`.

@@ -1,0 +1,166 @@
+---
+title: "CLI commands"
+description: "Commands available via the devix CLI"
+---
+
+The `devix` CLI is the entry point for development, production builds, static site generation, and serving.
+
+## Command reference
+
+| Command | Description |
+|---|---|
+| `devix dev` | Start the development server with HMR |
+| `devix build` | Compile the app for production |
+| `devix generate` | Build and pre-render all pages to static HTML (SSG) |
+| `devix start` | Start the production server or serve static files |
+| `devix --version` / `devix -v` | Print the installed devix version |
+| `devix --help` / `devix -h` | Print usage information |
+
+---
+
+## devix dev
+
+Starts the development server with Hot Module Replacement.
+
+```bash
+devix dev
+```
+
+The dev server reloads automatically when source files change. Port and host are read from `devix.config.ts`.
+
+---
+
+## devix build
+
+Compiles the app for production. Runs three sequential Vite builds:
+
+1. **Client bundle** — output to `dist/client/`
+2. **SSR render bundle** — output to `dist/server/render.js`
+3. **SSR API bundle** — output to `dist/server/api.js`
+
+Also writes a `dist/devix.config.json` file containing the runtime configuration (port, host, loader timeout, output mode).
+
+```bash
+devix build
+```
+
+<Note>
+  Run `devix build` before `devix start` or before deploying a server-rendered app.
+</Note>
+
+---
+
+## devix generate
+
+Builds the app and then pre-renders every static route to an HTML file. Use this for static site generation (SSG).
+
+```bash
+devix generate
+```
+
+**What it does:**
+
+1. Runs `devix build` internally.
+2. Calls `getStaticRoutes()` from your route modules to discover all URLs.
+3. Renders each URL to `dist/client/<path>/index.html`.
+4. Writes loader data snapshots to `dist/client/_data/<path>.json`.
+5. If `output: "static"` is set in `devix.config.ts`, removes `dist/server/` — the server bundle is not needed at runtime.
+
+<Tip>
+  Set `output: "static"` in `devix.config.ts` to let devix skip building the SSR server entirely. A warning is printed if you run `devix generate` without this setting.
+</Tip>
+
+<Warning>
+  API routes require a running server. They are not available when deploying with `output: "static"`.
+</Warning>
+
+---
+
+## devix start
+
+Starts the production server. Behavior depends on the `output` setting written into `dist/devix.config.json` at build time.
+
+```bash
+devix start
+```
+
+### Server mode (default)
+
+When `output` is `"server"` (or not set), `devix start` loads the SSR render and API bundles and handles every request dynamically:
+
+- API routes are registered and processed at runtime.
+- Pages are server-rendered on each request.
+- Static assets in `dist/client/` are served with aggressive long-term caching for hashed asset files.
+
+### Static mode
+
+When `output` is `"static"`, `devix start` only serves the pre-generated files from `dist/client/`. No SSR or API processing occurs:
+
+- Pre-rendered HTML files are served for each route.
+- Loader data snapshots are served from `/_data/*`.
+- No `dist/server/` bundle is loaded.
+
+```
+[devix] Static mode — serving pre-generated files from dist/client
+```
+
+### PORT environment variable
+
+The port can be overridden at runtime with the `PORT` environment variable, regardless of what was configured at build time:
+
+```bash
+PORT=8080 devix start
+```
+
+If `PORT` is not set, the port from `dist/devix.config.json` is used (defaults to `3000`).
+
+---
+
+## Typical workflows
+
+### SSR production deployment
+
+```bash
+# Build for production
+devix build
+
+# Start the server (uses port from devix.config.ts, or PORT env var)
+devix start
+```
+
+### Static site generation (SSG)
+
+```bash
+# Generate static HTML for all routes
+devix generate
+
+# Deploy dist/client/ to any static host (Netlify, S3, GitHub Pages, etc.)
+```
+
+After `devix generate` with `output: "static"`, the `dist/client/` directory is fully self-contained and can be served from any static file host.
+
+<AccordionGroup>
+  <Accordion title="Output mode: server vs static">
+    Configure the output mode in `devix.config.ts`:
+
+    ```ts
+    // devix.config.ts
+    export default {
+      output: 'server',  // default — full SSR at runtime
+      // output: 'static', // SSG — devix generate pre-renders everything
+    }
+    ```
+
+    `devix start` reads the `output` value written to `dist/devix.config.json` at build time, so the mode is locked in when you run `devix build` or `devix generate`.
+  </Accordion>
+
+  <Accordion title="Port and host configuration">
+    Port and host are read from `devix.config.ts` at build time and baked into `dist/devix.config.json`. At runtime, `PORT` overrides the port:
+
+    ```bash
+    PORT=8080 devix start
+    ```
+
+    Setting `host: true` in `devix.config.ts` binds to `0.0.0.0` (all interfaces), which is required for most containerized deployments.
+  </Accordion>
+</AccordionGroup>

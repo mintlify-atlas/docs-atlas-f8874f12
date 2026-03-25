@@ -1,0 +1,127 @@
+---
+title: "devix.config.ts"
+description: "Configure devix with defineConfig"
+---
+
+devix is configured through a `devix.config.ts` file at the root of your project. Export a `defineConfig` call as the default export.
+
+```ts devix.config.ts
+import { defineConfig } from '@devlusoft/devix/config'
+
+export default defineConfig({
+    port: 3000,
+    host: false,
+    appDir: 'app',
+    publicDir: 'public',
+    output: 'server',
+    loaderTimeout: '10s',
+    css: ['./app/styles/global.css'],
+    envPrefix: 'PUBLIC_',
+    html: { lang: 'en' },
+    vite: {},
+})
+```
+
+<Note>
+  You do not need a separate `vite.config.ts`. Pass Vite configuration directly through the `vite` field here — devix merges it with its base Vite config using `mergeConfig`.
+</Note>
+
+## Options
+
+<ParamField path="port" type="number" default="3000">
+  Port the dev and production servers listen on. Can be overridden at runtime with the `PORT` environment variable.
+</ParamField>
+
+<ParamField path="host" type="string | boolean" default="false">
+  Network interface to bind to.
+
+  - `false` — listen on `localhost` only
+  - `true` — listen on `0.0.0.0` (accessible on your local network)
+  - `string` — bind to a specific hostname, e.g. `'my.dev.host'`
+</ParamField>
+
+<ParamField path="appDir" type="string" default="'app'">
+  Root directory for your application source. devix resolves the following subdirectories from this value:
+
+  - `{appDir}/pages/` — file-based page routes
+  - `{appDir}/api/` — API routes
+</ParamField>
+
+<ParamField path="publicDir" type="string" default="'public'">
+  Directory of static files served at the site root. Files are copied as-is to `dist/client/` during a build and are accessible at the same path. For example, `public/logo.png` is served at `/logo.png`.
+</ParamField>
+
+<ParamField path="output" type="'server' | 'static'" default="'server'">
+  Determines the build and serving strategy.
+
+  - `'server'` — SSR mode. `devix start` handles each request dynamically.
+  - `'static'` — SSG mode. `devix generate` pre-renders all pages to static HTML. `devix start` then serves only static files.
+</ParamField>
+
+<ParamField path="loaderTimeout" type="number | string" default="'10s'">
+  Maximum execution time for loaders and guards before they time out. Accepts a duration in milliseconds as a number, or a string with a unit suffix:
+
+  | Format | Example |
+  | --- | --- |
+  | Milliseconds | `500` or `'500ms'` |
+  | Seconds | `'5s'` |
+  | Minutes | `'2m'` |
+  | Hours | `'1h'` |
+</ParamField>
+
+<ParamField path="css" type="string[]">
+  Global CSS files injected into every page. Paths are relative to the project root.
+
+  ```ts devix.config.ts
+  export default defineConfig({
+      css: ['./app/styles/global.css'],
+  })
+  ```
+</ParamField>
+
+<ParamField path="envPrefix" type="string | string[]" default="'VITE_'">
+  Environment variable prefix (or list of prefixes) exposed to the client via `import.meta.env`. Variables without this prefix are only accessible on the server.
+
+  ```ts devix.config.ts
+  export default defineConfig({
+      envPrefix: 'PUBLIC_',
+  })
+  ```
+
+  See [Environment variables](/configuration/environment-variables) for full details.
+</ParamField>
+
+<ParamField path="html" type="{ lang?: string }">
+  Default HTML attributes applied to the `<html>` element on every page.
+
+  ```ts devix.config.ts
+  export default defineConfig({
+      html: { lang: 'en' },
+  })
+  ```
+</ParamField>
+
+<ParamField path="vite" type="UserConfig">
+  Additional Vite configuration merged with devix's base config using Vite's `mergeConfig`. Accepts any valid [Vite `UserConfig`](https://vite.dev/config/).
+
+  Use this field to add path aliases, plugins, or any other Vite option:
+
+  ```ts devix.config.ts
+  import { defineConfig } from '@devlusoft/devix/config'
+  import path from 'path'
+
+  export default defineConfig({
+      vite: {
+          resolve: {
+              alias: {
+                  '@': path.resolve(__dirname, './app'),
+              },
+          },
+      },
+  })
+  ```
+
+  <Tip>
+    Path aliases defined here work in both client and server code.
+  </Tip>
+</ParamField>

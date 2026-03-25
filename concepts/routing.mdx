@@ -1,0 +1,130 @@
+---
+title: "Routing"
+description: "File-based routing with static and dynamic segments"
+---
+
+Files inside `app/pages/` automatically become routes. No configuration required — the file system is the router.
+
+## Static routes
+
+Every `.tsx` file maps directly to a URL path.
+
+| File | URL |
+|---|---|
+| `app/pages/index.tsx` | `/` |
+| `app/pages/about.tsx` | `/about` |
+| `app/pages/blog/index.tsx` | `/blog` |
+| `app/pages/blog/new.tsx` | `/blog/new` |
+
+## Dynamic routes
+
+Wrap a segment in brackets to make it dynamic. The bracket name becomes the param key.
+
+| File | URL |
+|---|---|
+| `app/pages/blog/[slug].tsx` | `/blog/:slug` |
+| `app/pages/[category]/[id].tsx` | `/:category/:id` |
+
+<Note>
+  Static routes always win over dynamic ones. `/blog/new` matches `app/pages/blog/new.tsx`, never `app/pages/blog/[slug].tsx`.
+</Note>
+
+## Accessing params
+
+Params are available in `loader`, `guard`, `generateMetadata`, and as page props.
+
+```tsx
+import type { PageProps, LoaderContext } from '@devlusoft/devix'
+
+export async function loader({ params }: LoaderContext<{ slug: string }>) {
+  return db.posts.findBySlug(params.slug)
+}
+
+export default function Page({ params }: PageProps) {
+  return <p>{params.slug}</p>
+}
+```
+
+### useParams
+
+Access params from any component in the tree without prop-drilling.
+
+```tsx
+import { useParams } from '@devlusoft/devix'
+
+const { slug } = useParams<{ slug: string }>()
+```
+
+### useRouter
+
+Read the current router state, including `pathname`.
+
+```tsx
+import { useRouter } from '@devlusoft/devix'
+
+const { pathname } = useRouter()
+```
+
+## Link component
+
+Use `Link` for client-side navigation. It renders an `<a>` tag and intercepts clicks to avoid full page reloads.
+
+```tsx
+import { Link } from '@devlusoft/devix'
+
+<Link href="/blog/hello-world">Read post</Link>
+```
+
+### prefetch
+
+Pre-fetches the page's loader data on hover, so navigation feels instant.
+
+```tsx
+<Link href="/blog/hello-world" prefetch>Read post</Link>
+```
+
+### viewTransition
+
+Animates the navigation using the browser's [View Transitions API](https://developer.mozilla.org/en-US/docs/Web/API/View_Transitions_API). Falls back silently in unsupported browsers.
+
+```tsx
+<Link href="/blog/hello-world" viewTransition>Read post</Link>
+```
+
+## Programmatic navigation
+
+Use `useNavigate()` to navigate without a `Link` element.
+
+```tsx
+import { useNavigate } from '@devlusoft/devix'
+
+const navigate = useNavigate()
+navigate('/dashboard')
+```
+
+## Reserved files
+
+Certain filenames in `app/pages/` have special meaning and are not treated as routes.
+
+| File | Purpose |
+|---|---|
+| `layout.tsx` | Wraps all pages in the same directory and subdirectories |
+| `error.tsx` | Error boundary for the route subtree _(coming soon)_ |
+
+See [Layouts](/concepts/layouts) for full details on `layout.tsx`.
+
+## Custom response headers
+
+Export a `headers` object from any page module to add custom HTTP response headers for that route. Headers are applied to the initial SSR response.
+
+```ts
+// app/pages/download.tsx
+export const headers = {
+  'Cache-Control': 'public, max-age=3600',
+  'X-Frame-Options': 'DENY',
+}
+
+export default function DownloadPage() {
+  return <div>...</div>
+}
+```

@@ -1,0 +1,214 @@
+---
+title: "Metadata and SEO"
+description: "Control page titles, descriptions, Open Graph, and Twitter cards"
+---
+
+devix merges metadata from layouts and pages automatically. Export a `metadata` object for static values, or `generateMetadata()` when you need data from the loader.
+
+## Static vs dynamic metadata
+
+<Tabs>
+  <Tab title="Static">
+    Export a `metadata` object from any page or layout file. The `Metadata` type covers all standard fields.
+
+    ```ts
+    import type { Metadata } from '@devlusoft/devix'
+
+    export const metadata: Metadata = {
+      title: 'Home',
+      description: 'Welcome to my site',
+      keywords: ['react', 'ssr', 'devix'],
+      canonical: 'https://example.com/',
+      robots: 'index, follow',
+    }
+    ```
+  </Tab>
+  <Tab title="Dynamic">
+    Export `generateMetadata()` when the title or description depends on loader data. devix calls it after the loader resolves.
+
+    ```ts
+    import type { Metadata, LoaderContext } from '@devlusoft/devix'
+
+    export async function loader({ params }: LoaderContext<{ slug: string }>) {
+      return db.posts.findBySlug(params.slug)
+    }
+
+    export async function generateMetadata({ loaderData }) {
+      return {
+        title: loaderData.title,
+        description: loaderData.excerpt,
+        og: { image: loaderData.cover, type: 'article' },
+      } satisfies Metadata
+    }
+    ```
+
+    `loaderData` is the resolved return value of the page's `loader` function, fully typed.
+  </Tab>
+</Tabs>
+
+## Open Graph
+
+Set `og` inside `metadata` (or the return value of `generateMetadata`) to control how your pages appear when shared on social platforms.
+
+```ts
+import type { Metadata } from '@devlusoft/devix'
+
+export const metadata: Metadata = {
+  og: {
+    title: 'My page',
+    description: 'A short description',
+    image: 'https://example.com/og.png',
+    type: 'website',  // 'website' | 'article' | 'product'
+    url: 'https://example.com/',
+  },
+}
+```
+
+For blog posts, set `type: 'article'` and populate `og.image` from the post's cover field via `generateMetadata`.
+
+## Twitter / X cards
+
+```ts
+import type { Metadata } from '@devlusoft/devix'
+
+export const metadata: Metadata = {
+  twitter: {
+    card: 'summary_large_image',  // 'summary' | 'summary_large_image'
+    title: 'My page',
+    image: 'https://example.com/og.png',
+    creator: '@myhandle',
+  },
+}
+```
+
+<Tip>
+  Twitter falls back to the Open Graph image if `twitter.image` is not set — but setting both explicitly gives you the most control.
+</Tip>
+
+## Viewport
+
+Export a `viewport` object for static values, or `generateViewport()` to compute them at request time.
+
+```ts
+import type { Viewport } from '@devlusoft/devix'
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#6366f1',
+}
+```
+
+Dynamic viewport — for example, reading the user's preferred theme from the request:
+
+```ts
+export async function generateViewport({ request }) {
+  return { themeColor: await getUserTheme(request) }
+}
+```
+
+`Viewport` supports `width`, `initialScale`, `maximumScale`, `userScalable`, and `themeColor`.
+
+## Page language
+
+Set the `lang` attribute on the `<html>` element from the root layout. Export a string constant for a fixed language, or `generateLang()` for content-negotiation.
+
+```ts
+// app/pages/layout.tsx
+export const lang = 'en'
+
+// or detect from the Accept-Language header
+export async function generateLang({ request }: LoaderContext) {
+  const accept = request.headers.get('Accept-Language') ?? ''
+  return accept.startsWith('es') ? 'es' : 'en'
+}
+```
+
+<Note>
+  `lang` and `generateLang` are only meaningful in the root layout (`app/pages/layout.tsx`). devix ignores them in nested layouts.
+</Note>
+
+## Alternate URLs for multi-language sites
+
+The `alternates` field emits `<link rel="alternate" hreflang="...">` tags, which help search engines find localized versions of a page.
+
+```ts
+import type { Metadata } from '@devlusoft/devix'
+
+export const metadata: Metadata = {
+  alternates: {
+    en: 'https://example.com/en/about',
+    es: 'https://example.com/es/about',
+  },
+}
+```
+
+## Metadata merging
+
+devix deep-merges metadata from the layout and the page. Page values win on conflicts; nested objects like `og` merge field-by-field, so you can set a site-wide default image in the layout and override only what the page needs.
+
+```ts
+// app/pages/layout.tsx
+export const metadata: Metadata = {
+  title: 'My Site',
+  og: { type: 'website', image: '/og-default.png' },
+}
+
+// app/pages/blog/[slug].tsx
+export async function generateMetadata({ loaderData }) {
+  return {
+    title: loaderData.title,       // overrides layout title
+    og: { image: loaderData.cover }, // overrides og.image, keeps og.type: 'website'
+  }
+}
+```
+
+<AccordionGroup>
+  <Accordion title="Full Metadata type reference">
+    ```ts
+    interface MetadataIcon {
+      href: string
+      rel?: string
+      type?: string
+      sizes?: string
+    }
+
+    interface Metadata {
+      title?: string
+      description?: string
+      keywords?: string[]
+      canonical?: string
+      robots?: string
+      alternates?: Record<string, string>
+      icons?: string | MetadataIcon | MetadataIcon[]
+      og?: {
+        title?: string
+        description?: string
+        image?: string
+        type?: 'website' | 'article' | 'product'
+        url?: string
+      }
+      twitter?: {
+        card?: 'summary' | 'summary_large_image'
+        title?: string
+        description?: string
+        image?: string
+        creator?: string
+      }
+    }
+    ```
+
+    The `icons` field accepts a URL string (shorthand for a favicon), a single `MetadataIcon` object, or an array of icon objects for multiple sizes/types.
+  </Accordion>
+  <Accordion title="Full Viewport type reference">
+    ```ts
+    interface Viewport {
+      width?: string | number
+      initialScale?: number
+      maximumScale?: number
+      userScalable?: boolean
+      themeColor?: string
+    }
+    ```
+  </Accordion>
+</AccordionGroup>

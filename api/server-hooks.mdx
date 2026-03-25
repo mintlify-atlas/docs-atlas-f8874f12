@@ -1,0 +1,176 @@
+---
+title: "Server context hooks"
+description: "Hooks for accessing request context inside API handlers"
+---
+
+Server context hooks let you access the active request and route context from anywhere in the call stack during a handler invocation — no need to thread `req` or `ctx` through every function.
+
+```ts
+import { useRequest, useCtx, useParams } from '@devlusoft/devix/server'
+```
+
+<Warning>
+  All three hooks throw if called outside an active handler context. They rely on Node.js `AsyncLocalStorage` and are only valid during the synchronous or asynchronous execution of a handler.
+</Warning>
+
+## useRequest()
+
+Returns the native `Request` object for the current handler invocation.
+
+**Signature**
+
+```ts
+function useRequest(): Request
+```
+
+<ResponseField name="returns" type="Request">
+  The Web API `Request` object for the currently executing handler.
+</ResponseField>
+
+**Example**
+
+```ts
+import { useRequest } from '@devlusoft/devix/server'
+
+function getAuthHeader(): string | null {
+  const req = useRequest()
+  return req.headers.get('Authorization')
+}
+```
+
+Because hooks use `AsyncLocalStorage`, `useRequest()` works in any helper called during the handler — not just at the top level:
+
+```ts
+import { createHandler, json } from '@devlusoft/devix'
+import { useRequest } from '@devlusoft/devix/server'
+
+async function getSession() {
+  const req = useRequest()
+  return verifyToken(req.headers.get('Authorization') ?? '')
+}
+
+export const GET = createHandler(async () => {
+  const session = await getSession()
+  if (!session) return json({ error: 'Unauthorized' }, 401)
+  return json({ user: session.user })
+})
+```
+
+---
+
+## useCtx()
+
+Returns the `RouteContext` for the current handler invocation. Use it to read route params or to share state between middleware and handlers via `ctx.set` / `ctx.get`.
+
+**Signature**
+
+```ts
+function useCtx(): RouteContext
+```
+
+<ResponseField name="returns" type="RouteContext">
+  The route context object for the currently executing handler.
+</ResponseField>
+
+### RouteContext
+
+<ResponseField name="params" type="Record<string, string>">
+  Dynamic path segments for the matched route. For a route file `app/api/posts/[id].ts`, `params.id` contains the segment value.
+</ResponseField>
+
+<ResponseField name="ctx.set(key, value)" type="void">
+  Store an arbitrary value under `key` for the lifetime of the request. Useful for passing data from middleware to handlers.
+</ResponseField>
+
+<ResponseField name="ctx.get<T>(key)" type="T | undefined">
+  Retrieve a previously stored value by `key`. Returns `undefined` if nothing was set.
+</ResponseField>
+
+**Sharing state between middleware and a handler**
+
+```ts
+// app/api/middleware.ts
+import { getCookie, type MiddlewareModule } from '@devlusoft/devix'
+
+export const middleware: MiddlewareModule['middleware'] = async (ctx, req) => {
+  const token = getCookie(req, 'session')
+  if (!token) return new Response('Unauthorized', { status: 401 })
+  ctx.set('user', await verifyToken(token))
+  return null
+}
+```
+
+```ts
+// app/api/profile.ts
+import { createHandler, json } from '@devlusoft/devix'
+import { useCtx } from '@devlusoft/devix/server'
+
+type User = { id: string; email: string }
+
+export const GET = createHandler(async () => {
+  const ctx = useCtx()
+  const user = ctx.get<User>('user')
+  return json({ user })
+})
+```
+
+---
+
+## useParams()
+
+Returns the route params for the current handler invocation. This is a convenience wrapper around `useCtx().params`.
+
+**Signature**
+
+```ts
+function useParams(): Record<string, string>
+```
+
+<ResponseField name="returns" type="Record<string, string>">
+  An object mapping each dynamic path segment name to its string value.
+</ResponseField>
+
+**Example**
+
+```ts
+import { createHandler, json } from '@devlusoft/devix'
+import { useParams } from '@devlusoft/devix/server'
+
+async function fetchPost() {
+  const { id } = useParams()
+  return db.posts.find(id)
+}
+
+export const GET = createHandler(async () => {
+  const post = await fetchPost()
+  if (!post) return json({ error: 'Not found' }, 404)
+  return json(post)
+})
+```
+
+<Tip>
+  `useParams()` is equivalent to calling `useCtx().params`. Use whichever reads more naturally in context.
+</Tip>
+
+---
+
+## How context propagation works
+
+Devix stores the `{ request, ctx }` pair in a Node.js `AsyncLocalStorage` instance at the start of each handler invocation and clears it when the handler settles. All three hooks read from this store.
+
+```ts
+// Conceptual implementation (simplified)
+const storage = new AsyncLocalStorage<{ request: Request; ctx: RouteContext }>()
+
+// Called by devix before invoking your handler
+storage.run({ request: req, ctx }, () => handler())
+
+// Inside your handler (or any function it calls)
+function useRequest() {
+  const store = storage.getStore()
+  if (!store) throw new Error('[devix] useRequest() called outside of a request handler')
+  return store.request
+}
+```
+
+Because `AsyncLocalStorage` propagates through `await` boundaries automatically, the hooks work correctly across async call chains without any manual context passing.

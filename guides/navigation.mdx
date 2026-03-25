@@ -1,0 +1,164 @@
+---
+title: "Navigation"
+description: "Navigate between pages with Link, useNavigate, and useRevalidate"
+---
+
+devix provides four primitives for navigation. Use `Link` for declarative links, `useNavigate` for programmatic navigation, `useRevalidate` to refresh loader data in place, and `redirect()` inside loaders and guards to redirect server-side.
+
+<CardGroup cols={2}>
+  <Card title="Link" icon="link">
+    Declarative anchor with prefetch and View Transitions support.
+  </Card>
+  <Card title="useNavigate" icon="arrow-right">
+    Programmatic navigation from event handlers or effects.
+  </Card>
+  <Card title="useRevalidate" icon="rotate-right">
+    Refresh loader data without a full page reload.
+  </Card>
+  <Card title="redirect()" icon="arrow-turn-down-right">
+    Server-side redirect from loaders and guards.
+  </Card>
+</CardGroup>
+
+## Link
+
+`Link` renders an `<a>` tag and handles client-side navigation automatically. Import it from `@devlusoft/devix`.
+
+```tsx
+import { Link } from '@devlusoft/devix'
+
+<Link href="/blog/hello-world">Read post</Link>
+```
+
+### Prefetch on hover
+
+Add the `prefetch` prop to start fetching loader data as soon as the user hovers over the link. This makes the subsequent navigation feel instant.
+
+```tsx
+<Link href="/blog/hello-world" prefetch>
+  Read post
+</Link>
+```
+
+### View Transitions API
+
+Add `viewTransition` to animate the page change using the browser's View Transitions API.
+
+```tsx
+<Link href="/blog/hello-world" viewTransition>
+  Read post
+</Link>
+```
+
+<Note>
+  devix falls back silently in browsers that do not support the View Transitions API. The navigation still works — the animation is simply skipped. No polyfill is required.
+</Note>
+
+## useNavigate
+
+`useNavigate` returns a `navigate` function for use in event handlers, form submissions, or any code that runs in the browser.
+
+```tsx
+import { useNavigate } from '@devlusoft/devix'
+
+function LogoutButton() {
+  const navigate = useNavigate()
+
+  async function handleLogout() {
+    await fetch('/api/auth/logout', { method: 'DELETE' })
+    navigate('/login')
+  }
+
+  return <button onClick={handleLogout}>Log out</button>
+}
+```
+
+### Replace instead of push
+
+Pass `{ replace: true }` to replace the current history entry instead of pushing a new one. Useful after form submissions or login redirects.
+
+```tsx
+navigate('/dashboard', { replace: true })
+```
+
+### View Transitions with useNavigate
+
+```tsx
+navigate('/blog/hello-world', { viewTransition: true })
+```
+
+As with `Link`, the transition degrades silently in unsupported browsers.
+
+## useRevalidate
+
+`useRevalidate` returns a `revalidate` function that re-runs the current page's loader and updates the UI — without a full page reload or navigation.
+
+```tsx
+import { useRevalidate } from '@devlusoft/devix'
+
+function RefreshButton() {
+  const revalidate = useRevalidate()
+
+  return (
+    <button onClick={() => revalidate()}>
+      Refresh
+    </button>
+  )
+}
+```
+
+This is useful after mutations — for example, after a form POST that updates data you want reflected in the current page's loader data without navigating away.
+
+## redirect() in loaders
+
+Use the `redirect()` helper inside a `loader` or `guard` to redirect the user on the server before the page renders. Import it from `@devlusoft/devix`.
+
+```ts
+import { redirect, type LoaderContext } from '@devlusoft/devix'
+
+export async function loader({ request }: LoaderContext) {
+  const session = await getSession(request)
+  if (!session) return redirect('/login')
+  return { user: session.user }
+}
+```
+
+To replace instead of push in the browser history:
+
+```ts
+return redirect('/login', { replace: true })
+```
+
+<Tip>
+  Prefer `guard()` over redirecting inside `loader()` for auth checks. Guards run before the loader, so no data-fetching work is wasted.
+</Tip>
+
+## useRouter
+
+`useRouter` gives you the current `pathname` from anywhere in the component tree.
+
+```tsx
+import { useRouter, useParams } from '@devlusoft/devix'
+
+function NavItem({ href, label }: { href: string; label: string }) {
+  const { pathname } = useRouter()
+  const isActive = pathname === href
+
+  return (
+    <Link href={href} style={{ fontWeight: isActive ? 'bold' : 'normal' }}>
+      {label}
+    </Link>
+  )
+}
+```
+
+For dynamic route params, use `useParams` instead:
+
+```tsx
+import { useParams } from '@devlusoft/devix'
+
+function PostHeader() {
+  const { slug } = useParams<{ slug: string }>()
+  return <p>Viewing: {slug}</p>
+}
+```

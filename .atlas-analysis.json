@@ -1,0 +1,127 @@
+{
+  "projectType": "framework",
+  "projectName": "devix",
+  "projectDescription": "A lightweight React 19 SSR meta-framework powered by Vite 8 and Hono, with file-based routing, SSG, API routes, and end-to-end TypeScript types.",
+  "theme": "palm",
+  "primaryColor": "#848c8e",
+  "lightColor": "#11161e",
+  "darkColor": "#cfd0d2",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "project-structure"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/routing",
+              "concepts/layouts",
+              "concepts/data-loading",
+              "concepts/api-routes",
+              "concepts/ssg"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/metadata-seo",
+              "guides/navigation",
+              "guides/cookies-auth",
+              "guides/deployment"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/devix-config",
+              "configuration/environment-variables"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Runtime",
+            "pages": [
+              "api/hooks",
+              "api/components",
+              "api/utilities"
+            ]
+          },
+          {
+            "group": "Server",
+            "pages": [
+              "api/server-hooks",
+              "api/create-handler",
+              "api/response-helpers"
+            ]
+          },
+          {
+            "group": "CLI",
+            "pages": [
+              "api/cli-commands"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "File-based routing with static and dynamic segments",
+    "Server-Side Rendering (SSR) with React 19 and Vite 8",
+    "Static Site Generation (SSG) via generateStaticParams",
+    "File-based API routes with end-to-end TypeScript types via createHandler and $fetch",
+    "Nested layouts with parallel loader execution",
+    "Route guards for server-side redirects before rendering",
+    "SEO metadata with Open Graph, Twitter Card, and dynamic generation",
+    "Typed navigation hooks: useNavigate, useRevalidate with View Transitions API support",
+    "Context hooks: useRequest, useCtx, useParams for handler-scoped access",
+    "API middleware per directory"
+  ],
+  "publicApiSurface": [
+    "useRouter()",
+    "useNavigate()",
+    "useRevalidate()",
+    "useParams()",
+    "useLoaderData()",
+    "Link",
+    "RouterProvider",
+    "createHandler()",
+    "$fetch()",
+    "FetchError",
+    "json()",
+    "text()",
+    "redirect()",
+    "getCookie()",
+    "setCookie()",
+    "deleteCookie()",
+    "defineConfig()",
+    "useRequest() [server]",
+    "useCtx() [server]",
+    "useParams() [server]",
+    "loader",
+    "guard",
+    "generateStaticParams",
+    "metadata",
+    "generateMetadata",
+    "viewport",
+    "generateViewport",
+    "generateLang",
+    "DevixError",
+    "PageProps",
+    "LayoutProps",
+    "LoaderContext",
+    "RouteHandler",
+    "DevixConfig"
+  ]
+}

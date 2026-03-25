@@ -1,0 +1,86 @@
+---
+title: "Introduction"
+description: "A lightweight React 19 SSR meta-framework powered by Vite 8 and Hono"
+---
+
+# devix
+
+devix is a lightweight React 19 meta-framework that lets you build full-stack applications with server-side rendering, file-based routing, static site generation, and typed API routes — all with minimal configuration and maximum TypeScript coverage.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get your first devix app running in under 5 minutes
+  </Card>
+  <Card title="File-based routing" icon="folder-tree" href="/concepts/routing">
+    Pages, dynamic segments, and nested layouts from the filesystem
+  </Card>
+  <Card title="API routes" icon="plug" href="/concepts/api-routes">
+    End-to-end typed API handlers with createHandler and $fetch
+  </Card>
+  <Card title="Static generation" icon="bolt" href="/concepts/ssg">
+    Pre-render every page to static HTML at build time
+  </Card>
+</CardGroup>
+
+## What is devix?
+
+devix sits between a bare Vite setup and a full-stack framework. It gives you the conventions and tooling to build React apps with SSR out of the box — without locking you into a proprietary runtime or deployment target.
+
+- **Powered by Vite 8** — instant HMR, fast builds via Rolldown, full Vite plugin ecosystem
+- **Powered by Hono** — a fast, lightweight web framework that runs on Node.js and edge runtimes
+- **React 19** — `renderToString` on the server, `hydrateRoot` on the client
+- **TypeScript first** — full type inference from loaders to API responses to navigation
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="SSR by default" icon="server">
+    Every page renders on the server and hydrates on the client automatically — no configuration required.
+  </Card>
+  <Card title="File-based routing" icon="files">
+    Drop a file in `app/pages/` and it becomes a route. Dynamic segments use `[bracket]` syntax.
+  </Card>
+  <Card title="Nested layouts" icon="layout">
+    `layout.tsx` files wrap all pages in the same directory. Layouts run loaders in parallel with pages.
+  </Card>
+  <Card title="Data loading" icon="database">
+    Export a `loader` function from any page. Data is fetched on the server, serialized, and hydrated.
+  </Card>
+  <Card title="API routes" icon="code">
+    Files in `app/api/` become HTTP endpoints. `createHandler` provides end-to-end TypeScript types.
+  </Card>
+  <Card title="Route guards" icon="shield">
+    Export a `guard` function to redirect users server-side before the page renders.
+  </Card>
+  <Card title="Static site generation" icon="globe">
+    Set `output: 'static'` and run `devix generate` to pre-render all pages to HTML files.
+  </Card>
+  <Card title="SEO metadata" icon="tag">
+    Export `metadata` or `generateMetadata` from any page or layout for full Open Graph and Twitter support.
+  </Card>
+</CardGroup>
+
+## How it compares
+
+devix is intentionally minimal. You get file-based routing, SSR, SSG, and typed API routes — and you extend everything else through standard Vite configuration. There is no plugin system to learn, no runtime-specific adapters, and no proprietary data-fetching primitives.
+
+<Note>
+  devix requires **React 19+**, **Vite 8+**, and **Node.js 20+**. Install it alongside your existing React and Vite dependencies.
+</Note>
+
+## Next steps
+
+<Steps>
+  <Step title="Install devix">
+    Follow the [Quickstart](/quickstart) to create your first project.
+  </Step>
+  <Step title="Understand the project layout">
+    Read [Project structure](/project-structure) to see how `app/pages/` and `app/api/` work together.
+  </Step>
+  <Step title="Add data to your pages">
+    Learn about [data loading](/concepts/data-loading) to fetch server-side data with full type safety.
+  </Step>
+  <Step title="Build your API">
+    Use [API routes](/concepts/api-routes) to create typed endpoints your pages can call with `$fetch`.
+  </Step>
+</Steps>

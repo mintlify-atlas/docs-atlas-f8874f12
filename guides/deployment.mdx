@@ -1,0 +1,173 @@
+---
+title: "Deployment"
+description: "Deploy devix in SSR or static mode"
+---
+
+devix supports two output modes: **server** (SSR) for fully dynamic applications, and **static** (SSG) for pre-rendered sites deployed to any CDN. Set the mode in `devix.config.ts` and pick the build command that matches.
+
+```ts
+// devix.config.ts
+import { defineConfig } from '@devlusoft/devix/config'
+
+export default defineConfig({
+  output: 'server',   // 'server' | 'static'
+})
+```
+
+<Tabs>
+  <Tab title="SSR deployment">
+    ## Building for SSR
+
+    Run `devix build` to produce a Node.js server bundle, then `devix start` to run it.
+
+    ```bash
+    devix build
+    devix start
+    ```
+
+    The build output looks like this:
+
+    ```
+    dist/
+    ├── server/
+    │   └── index.js      # Hono server entry point
+    └── client/
+        ├── assets/       # Bundled JS, CSS
+        └── ...           # Static assets copied from public/
+    ```
+
+    The server process listens on `PORT` (default `3000`). Override it with an environment variable:
+
+    ```bash
+    PORT=8080 devix start
+    ```
+
+    ### Binding to 0.0.0.0 in containers
+
+    By default devix binds to `localhost`. Set `host: true` in your config to bind to `0.0.0.0`, which is required inside Docker and most container runtimes.
+
+    ```ts
+    import { defineConfig } from '@devlusoft/devix/config'
+
+    export default defineConfig({
+      output: 'server',
+      host: true,
+    })
+    ```
+
+    ### Supported platforms
+
+    SSR requires a persistent Node.js process. It works on:
+
+    - Any **VPS** or bare metal server with Node.js 20+
+    - **AWS EC2 / ECS** / App Runner
+    - **Fly.io** (`fly deploy`)
+    - **Railway** (`railway up`)
+    - **Render** (web service, Node environment)
+    - Any platform that lets you run `node dist/server/index.js`
+
+    ### Dockerfile example
+
+    ```dockerfile
+    FROM node:20-alpine AS builder
+    WORKDIR /app
+    COPY package*.json ./
+    RUN npm ci
+    COPY . .
+    RUN npm run build
+
+    FROM node:20-alpine
+    WORKDIR /app
+    COPY --from=builder /app/dist ./dist
+    COPY --from=builder /app/package*.json ./
+    RUN npm ci --omit=dev
+    ENV PORT=3000
+    EXPOSE 3000
+    CMD ["npx", "devix", "start"]
+    ```
+
+    <Tip>
+      Pin the Node.js version in your Dockerfile to match your local development environment. devix requires **Node.js 20 or later**.
+    </Tip>
+  </Tab>
+
+  <Tab title="Static deployment">
+    ## Building for static
+
+    Run `devix generate` to pre-render all pages to HTML files.
+
+    ```bash
+    devix generate
+    ```
+
+    The output directory is `dist/client/`. Deploy its entire contents to any static host.
+
+    ```
+    dist/
+    └── client/
+        ├── index.html
+        ├── about/
+        │   └── index.html
+        ├── blog/
+        │   ├── index.html
+        │   └── hello-world/
+        │       └── index.html
+        └── assets/
+            ├── main-[hash].js
+            └── main-[hash].css
+    ```
+
+    <Warning>
+      API routes (`app/api/`) are **not available** in static mode. They require a running server. Move any required server logic to a separate backend or use a third-party API.
+    </Warning>
+
+    ### Supported platforms
+
+    Any host that serves static files works. Common choices:
+
+    - **Netlify** — drop `dist/client/` as the publish directory
+    - **Cloudflare Pages** — set build output directory to `dist/client`
+    - **GitHub Pages** — push `dist/client/` contents to your `gh-pages` branch
+    - **Amazon S3** — sync `dist/client/` to a bucket with static website hosting enabled
+    - **Vercel** — set output directory to `dist/client` in project settings
+
+    ### Netlify example (`netlify.toml`)
+
+    ```toml
+    [build]
+      command = "devix generate"
+      publish = "dist/client"
+    ```
+
+    ### Cloudflare Pages example
+
+    Set in the Cloudflare Pages dashboard:
+
+    | Setting | Value |
+    |---|---|
+    | Build command | `devix generate` |
+    | Build output directory | `dist/client` |
+  </Tab>
+</Tabs>
+
+## Configuration reference
+
+| Config field | Type | Default | Description |
+|---|---|---|---|
+| `output` | `'server' \| 'static'` | `'server'` | Output mode |
+| `port` | `number` | `3000` | Port to listen on in SSR mode |
+| `host` | `string \| boolean` | `false` | `true` binds to `0.0.0.0` |
+
+```ts
+import { defineConfig } from '@devlusoft/devix/config'
+
+export default defineConfig({
+  output: 'server',
+  port: 3000,
+  host: true,
+})
+```
+
+<Note>
+  The `PORT` environment variable takes precedence over `port` in the config when running `devix start`.
+</Note>

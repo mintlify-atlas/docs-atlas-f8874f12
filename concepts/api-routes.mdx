@@ -1,0 +1,218 @@
+---
+title: "API routes"
+description: "File-based HTTP endpoints with end-to-end TypeScript types"
+---
+
+Files inside `app/api/` become HTTP endpoints. Export named functions for each HTTP method you want to handle.
+
+<Note>
+  API routes require a server. They are not available when using `output: 'static'`. See [Static site generation](/concepts/ssg).
+</Note>
+
+## File to endpoint mapping
+
+| File | Endpoint |
+|---|---|
+| `app/api/health.ts` | `/api/health` |
+| `app/api/posts/index.ts` | `/api/posts` |
+| `app/api/posts/[id].ts` | `/api/posts/:id` |
+
+## createHandler
+
+`createHandler` is the recommended way to define handlers. It infers the body type and return type automatically, enabling end-to-end TypeScript types with `$fetch`.
+
+```ts
+// app/api/auth/login.ts
+import { createHandler, json } from '@devlusoft/devix'
+
+export const POST = createHandler(async (body: { email: string; password: string }) => {
+  const token = await createSession(body.email, body.password)
+  if (!token) return json({ error: 'Invalid credentials' }, 401)
+  return json({ ok: true })
+})
+
+export const GET = createHandler(async () => {
+  return json({ status: 'ok' })
+})
+```
+
+The type of the handler's parameter **defines** the expected body type. devix parses the request body automatically based on `Content-Type`:
+
+- `application/json` → `req.json()`
+- `multipart/form-data` / `application/x-www-form-urlencoded` → `req.formData()`
+- Anything else → `req.text()`
+
+## RouteHandler (classic handler)
+
+For cases where you need direct access to `ctx` or `req`, use the `RouteHandler` type.
+
+```ts
+import { json, type RouteHandler } from '@devlusoft/devix'
+
+export const GET: RouteHandler = async (ctx, req) => {
+  return { hello: ctx.params.id }
+}
+
+export const POST: RouteHandler = async (ctx, req) => {
+  const body = await req.json()
+  return json(body, 201)
+}
+
+export const DELETE: RouteHandler = async (ctx) => null  // 204
+```
+
+The handler signature is `(ctx, req)` where:
+- `ctx.params` — route params
+- `ctx.set / ctx.get` — shared state with middleware
+- `req` — the native `Request` object
+
+## HTTP methods
+
+All standard HTTP methods are supported as named exports:
+
+```ts
+export const GET: RouteHandler = async (ctx, req) => { ... }
+export const POST: RouteHandler = async (ctx, req) => { ... }
+export const PUT: RouteHandler = async (ctx, req) => { ... }
+export const PATCH: RouteHandler = async (ctx, req) => { ... }
+export const DELETE: RouteHandler = async (ctx, req) => { ... }
+export const HEAD: RouteHandler = async (ctx, req) => { ... }
+export const OPTIONS: RouteHandler = async (ctx, req) => { ... }
+```
+
+## Context hooks
+
+When using `createHandler`, you can access the request and route context from anywhere in the call stack without passing them explicitly. Import from `@devlusoft/devix/server`.
+
+```ts
+import { createHandler, json } from '@devlusoft/devix'
+import { useRequest, useCtx, useParams } from '@devlusoft/devix/server'
+
+async function getSession() {
+  const req = useRequest()
+  return verifyToken(req.headers.get('Authorization') ?? '')
+}
+
+export const GET = createHandler(async () => {
+  const session = await getSession()
+  if (!session) return json({ error: 'Unauthorized' }, 401)
+  return json({ user: session.user })
+})
+```
+
+| Hook | Returns |
+|---|---|
+| `useRequest()` | `Request` — the native request object |
+| `useCtx()` | `RouteContext` — ctx with params and shared state |
+| `useParams()` | `Record<string, string>` — route params |
+
+<Warning>
+  Context hooks throw an error if called outside of an active handler. Do not call them at module level or in unrelated async callbacks.
+</Warning>
+
+## $fetch
+
+`$fetch` provides end-to-end type inference. TypeScript knows the expected body shape and infers the response type from the target route's `createHandler`.
+
+```ts
+import { $fetch } from '@devlusoft/devix'
+
+const res = await $fetch('/api/auth/login', {
+  method: 'POST',
+  body: { email: 'user@example.com', password: '1234' },
+})
+// res is typed as the inferred return of the POST handler
+```
+
+If the body does not match the expected type, TypeScript reports an error at compile time. At runtime, if JSON parsing fails or the handler throws, devix automatically returns `500`.
+
+## Return types
+
+| Return value | Result |
+|---|---|
+| Object or array | `200` with `Content-Type: application/json` |
+| `json(data, status)` | JSON with a custom status code |
+| `text(body, status)` | `text/plain` response |
+| `redirect(url, status)` | Redirect (302 by default) |
+| `new Response(...)` | Full control over the response |
+| `null` / `void` | `204 No Content` |
+
+## Cookies
+
+```ts
+import { getCookie, setCookie, deleteCookie, json, type RouteHandler } from '@devlusoft/devix'
+
+export const POST: RouteHandler = async (ctx, req) => {
+  const { email, password } = await req.json()
+  const token = await createSession(email, password)
+  if (!token) return json({ error: 'Invalid credentials' }, 401)
+
+  const res = json({ ok: true })
+  setCookie(res.headers, 'session', token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'Lax',
+    maxAge: 60 * 60 * 24 * 7,  // 7 days
+  })
+  return res
+}
+
+export const DELETE: RouteHandler = async (ctx, req) => {
+  const res = json({ ok: true })
+  deleteCookie(res.headers, 'session')
+  return res
+}
+```
+
+- `getCookie(req, name)` — reads a cookie from the request
+- `setCookie(headers, name, value, options)` — writes a cookie to the response headers
+- `deleteCookie(headers, name)` — removes a cookie via the response headers
+
+## Middleware
+
+Place `middleware.ts` in `app/api/` (or any subdirectory). It runs before every handler in that directory and all subdirectories. Return a `Response` to short-circuit, or `null` to continue.
+
+```ts
+import { getCookie, type MiddlewareModule } from '@devlusoft/devix'
+
+export const middleware: MiddlewareModule['middleware'] = async (ctx, req) => {
+  const token = getCookie(req, 'session')
+  if (!token) return new Response('Unauthorized', { status: 401 })
+  ctx.set('user', await verifyToken(token))
+  return null
+}
+```
+
+Access the value set by middleware from any handler in the same scope:
+
+```ts
+export const GET: RouteHandler = async (ctx) => {
+  const user = ctx.get<User>('user')
+  return user
+}
+```
+
+## DevixError
+
+Throw `DevixError` to return any HTTP status code from a handler in a controlled way. Unhandled errors automatically return `500`.
+
+```ts
+import { DevixError, type RouteHandler } from '@devlusoft/devix'
+
+export const GET: RouteHandler = async (ctx) => {
+  const post = await db.posts.find(ctx.params.id)
+  if (!post) throw new DevixError(404, 'Post not found')
+  return post
+}
+```
+
+With `createHandler`, use `DevixError` to validate the body and return a `400`:
+
+```ts
+import { createHandler, json, DevixError } from '@devlusoft/devix'
+
+export const POST = createHandler(async (body: { email: string }) => {
+  if (!body.email) throw new DevixError(400, 'email is required')
+  return json({ ok: true })
+})
+```

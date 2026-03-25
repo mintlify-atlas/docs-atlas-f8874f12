@@ -1,0 +1,241 @@
+---
+title: "Runtime hooks"
+description: "React hooks exported from @devlusoft/devix"
+---
+
+All hooks are imported from `@devlusoft/devix`:
+
+```ts
+import { useRouter, useNavigate, useRevalidate, useParams, useLoaderData } from '@devlusoft/devix'
+```
+
+<AccordionGroup>
+  <Accordion title="useRouter()">
+    Returns the full router context value for the current route.
+
+    **Signature**
+
+    ```ts
+    function useRouter(): RouterContextValue | null
+    ```
+
+    **Return type**
+
+    <ResponseField name="pathname" type="string">
+      The current URL pathname.
+    </ResponseField>
+
+    <ResponseField name="params" type="Record<string, string>">
+      Dynamic route segments for the current route.
+    </ResponseField>
+
+    <ResponseField name="loaderData" type="unknown">
+      The data returned by the current page's loader function.
+    </ResponseField>
+
+    <ResponseField name="isNavigating" type="boolean">
+      `true` while a client-side navigation is in progress.
+    </ResponseField>
+
+    <ResponseField name="navigate" type="(to: string, options?: NavigateOptions) => Promise<void>">
+      Programmatic navigation function. See `useNavigate()` for options.
+    </ResponseField>
+
+    <ResponseField name="revalidate" type="() => Promise<void>">
+      Re-fetches loader data for the current route without a full navigation.
+    </ResponseField>
+
+    **Usage**
+
+    ```tsx
+    import { useRouter } from '@devlusoft/devix'
+
+    export default function Breadcrumb() {
+      const { pathname } = useRouter()
+
+      return <nav>{pathname}</nav>
+    }
+    ```
+
+    <Note>
+      `useRouter` returns `null` when rendered outside of a `RouterProvider` tree, such as during SSR before hydration. Guard against `null` if you use it in shared components.
+    </Note>
+  </Accordion>
+
+  <Accordion title="useNavigate()">
+    Returns a function for programmatic client-side navigation.
+
+    **Signature**
+
+    ```ts
+    function useNavigate(): (to: string, options?: NavigateOptions) => Promise<void>
+    ```
+
+    **Parameters of the returned function**
+
+    <ParamField path="to" type="string" required>
+      The destination path to navigate to.
+    </ParamField>
+
+    <ParamField path="options.replace" type="boolean" default="false">
+      When `true`, replaces the current history entry instead of pushing a new one.
+    </ParamField>
+
+    <ParamField path="options.viewTransition" type="boolean" default="false">
+      When `true`, wraps the navigation in the browser's View Transition API if available.
+    </ParamField>
+
+    **Usage**
+
+    ```tsx
+    import { useNavigate } from '@devlusoft/devix'
+
+    export default function LogoutButton() {
+      const navigate = useNavigate()
+
+      return (
+        <button
+          onClick={() => navigate('/login', { replace: true })}
+        >
+          Log out
+        </button>
+      )
+    }
+    ```
+
+    **With view transitions**
+
+    ```tsx
+    import { useNavigate } from '@devlusoft/devix'
+
+    export default function AnimatedLink() {
+      const navigate = useNavigate()
+
+      return (
+        <button
+          onClick={() => navigate('/about', { viewTransition: true })}
+        >
+          About
+        </button>
+      )
+    }
+    ```
+
+    <Tip>
+      Use the `<Link>` component's `viewTransition` prop as a declarative alternative when navigating from anchor elements.
+    </Tip>
+  </Accordion>
+
+  <Accordion title="useRevalidate()">
+    Returns a function that re-fetches loader data for the current route without triggering a full navigation. Useful for refreshing stale data after a mutation.
+
+    **Signature**
+
+    ```ts
+    function useRevalidate(): () => Promise<void>
+    ```
+
+    **Usage**
+
+    ```tsx
+    import { useRevalidate } from '@devlusoft/devix'
+
+    export default function RefreshButton() {
+      const revalidate = useRevalidate()
+
+      async function handleClick() {
+        await fetch('/api/posts', { method: 'POST', body: JSON.stringify({ title: 'New post' }) })
+        await revalidate()
+      }
+
+      return <button onClick={handleClick}>Submit and refresh</button>
+    }
+    ```
+
+    <Note>
+      `revalidate()` re-runs the loader on the server and merges the new data into the current route state. The page URL does not change.
+    </Note>
+  </Accordion>
+
+  <Accordion title="useParams<T>()">
+    Returns the dynamic route parameters for the current route as a typed object.
+
+    **Signature**
+
+    ```ts
+    function useParams<T extends Record<string, string>>(): T
+    ```
+
+    **Type parameters**
+
+    <ParamField path="T" type="Record<string, string>">
+      An object type describing the expected route params. Defaults to `Record<string, string>`.
+    </ParamField>
+
+    **Usage**
+
+    ```tsx
+    import { useParams } from '@devlusoft/devix'
+
+    export default function PostPage() {
+      const { slug } = useParams<{ slug: string }>()
+
+      return <h1>Post: {slug}</h1>
+    }
+    ```
+
+    <Warning>
+      `useParams` throws if called outside a route or layout component tree. It must be used inside a component rendered by a `RouterProvider`.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="useLoaderData<T>()">
+    Returns the data returned by the closest loader function in the current route tree. The generic parameter `T` should be the type of your loader function, allowing TypeScript to infer the return value automatically.
+
+    **Signature**
+
+    ```ts
+    function useLoaderData<T>(): LoaderReturnType<T>
+    ```
+
+    The `LoaderReturnType<T>` utility strips `Redirect`, `void`, and `undefined` from the loader's return union, so the hook always resolves to the data-only type.
+
+    **Type parameters**
+
+    <ParamField path="T" type="function">
+      Pass your `loader` function type (or `typeof loader`) so that TypeScript can infer the resolved data type.
+    </ParamField>
+
+    **Usage**
+
+    ```tsx
+    // app/posts/[slug]/page.tsx
+    import { useLoaderData } from '@devlusoft/devix'
+    import type { loader } from './page'
+
+    function PostMeta() {
+      // data is fully typed without an explicit annotation
+      const data = useLoaderData<typeof loader>()
+
+      return <p>{data.author}</p>
+    }
+
+    export async function loader({ params }) {
+      return { title: 'Hello', author: 'Alice' }
+    }
+
+    export default function PostPage({ data }) {
+      return (
+        <article>
+          <h1>{data.title}</h1>
+          <PostMeta />
+        </article>
+      )
+    }
+    ```
+
+    <Warning>
+      `useLoaderData` throws if called outside a route or layout component tree.
+    </Warning>
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,115 @@
+---
+title: "Layouts"
+description: "Nest layouts to share UI across multiple pages"
+---
+
+A `layout.tsx` file automatically wraps all pages in the same directory and any subdirectories. Layouts are assembled on the server before the HTML is streamed to the client.
+
+## Root layout
+
+Place `layout.tsx` directly inside `app/pages/` to create a root layout that wraps every page in your app. Use the `LayoutProps` type for the component props.
+
+```tsx
+// app/pages/layout.tsx
+import type { LayoutProps } from '@devlusoft/devix'
+
+export default function RootLayout({ children }: LayoutProps) {
+  return (
+    <div>
+      <header>My App</header>
+      <main>{children}</main>
+    </div>
+  )
+}
+```
+
+## Nested layouts
+
+Create a `layout.tsx` inside any subdirectory to add a layout scoped to that section. It renders _inside_ the parent layout, not instead of it.
+
+```
+app/pages/
+├── layout.tsx          ← root layout
+├── index.tsx
+└── blog/
+    ├── layout.tsx      ← rendered inside root layout
+    ├── index.tsx
+    └── [slug].tsx
+```
+
+The full render chain assembled on the server:
+
+```
+RootLayout → BlogLayout → Page
+```
+
+## Loader in a layout
+
+Layouts can export a `loader` function. Layout loaders run **in parallel** with the page loader — they do not block each other.
+
+```tsx
+import type { LayoutProps, LoaderContext } from '@devlusoft/devix'
+
+export async function loader({ request }: LoaderContext) {
+  return { user: await getUser(request) }
+}
+
+export default function RootLayout({ children, data }: LayoutProps<{ user: User }>) {
+  return (
+    <div>
+      <header>
+        {data.user ? data.user.name : <a href="/login">Sign in</a>}
+      </header>
+      {children}
+    </div>
+  )
+}
+```
+
+Pass the loader's return type as the generic to `LayoutProps<T>` to get a fully typed `data` prop.
+
+## Accessing layout data on the client
+
+After the initial render, use `useLoaderData()` inside the layout component to read its own loader data on the client side.
+
+```tsx
+import { useLoaderData } from '@devlusoft/devix'
+
+export default function RootLayout({ children }: LayoutProps) {
+  const { user } = useLoaderData<{ user: User }>()
+  return (
+    <div>
+      <header>{user?.name}</header>
+      {children}
+    </div>
+  )
+}
+```
+
+<Note>
+  `useLoaderData()` inside a layout reads that layout's own loader data, not the page's loader data.
+</Note>
+
+## Setting the HTML lang attribute
+
+The `lang` attribute on `<html>` can only be set from the **root layout**. Use a static export or an async `generateLang` function.
+
+<Tabs>
+  <Tab title="Static">
+    ```ts
+    // app/pages/layout.tsx
+    export const lang = 'en'
+    ```
+  </Tab>
+  <Tab title="Dynamic">
+    ```ts
+    // app/pages/layout.tsx
+    export async function generateLang({ request }: LoaderContext) {
+      const accept = request.headers.get('Accept-Language') ?? ''
+      return accept.startsWith('es') ? 'es' : 'en'
+    }
+    ```
+  </Tab>
+</Tabs>
+
+`generateLang` receives the same `LoaderContext` as a loader, so you can base the language on request headers, cookies, or session data.

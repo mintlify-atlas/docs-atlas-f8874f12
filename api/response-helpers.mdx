@@ -1,0 +1,311 @@
+---
+title: "Response helpers"
+description: "Helper functions for building HTTP responses"
+---
+
+Devix exports a set of small helpers for the most common response patterns. Import them all from the main package:
+
+```ts
+import { json, text, redirect, getCookie, setCookie, deleteCookie, DevixError } from '@devlusoft/devix'
+```
+
+---
+
+## json(data, status?)
+
+Returns a `Response` with `Content-Type: application/json`.
+
+**Signature**
+
+```ts
+function json<const T>(data: T, status?: number): JsonResponse<T>
+```
+
+<ParamField path="data" type="T" required>
+  The value to serialize. Must be JSON-serializable.
+</ParamField>
+
+<ParamField path="status" type="number" default="200">
+  HTTP status code.
+</ParamField>
+
+<ResponseField name="returns" type="JsonResponse<T>">
+  A `Response` object branded with the body type `T`. `$fetch` uses this brand to infer the response type.
+</ResponseField>
+
+**Example**
+
+```ts
+import { createHandler, json } from '@devlusoft/devix'
+
+export const POST = createHandler(async (body: { email: string; password: string }) => {
+  const token = await createSession(body.email, body.password)
+  if (!token) return json({ error: 'Invalid credentials' }, 401)
+  return json({ ok: true })
+})
+```
+
+---
+
+## text(body, status?)
+
+Returns a `Response` with `Content-Type: text/plain; charset=utf-8`.
+
+**Signature**
+
+```ts
+function text(body: string, status?: number): Response
+```
+
+<ParamField path="body" type="string" required>
+  The plain-text response body.
+</ParamField>
+
+<ParamField path="status" type="number" default="200">
+  HTTP status code.
+</ParamField>
+
+**Example**
+
+```ts
+import { text, type RouteHandler } from '@devlusoft/devix'
+
+export const GET: RouteHandler = async () => {
+  return text('pong')
+}
+```
+
+---
+
+## redirect(url, options?)
+
+Returns a `Redirect` value that devix converts to an HTTP redirect response. Can be returned from loaders, guards, or API handlers.
+
+**Signature**
+
+```ts
+function redirect(url: string, statusOrOptions?: number | RedirectOptions): Redirect
+```
+
+<ParamField path="url" type="string" required>
+  The destination URL. Can be absolute or root-relative.
+</ParamField>
+
+<ParamField path="statusOrOptions" type="number | RedirectOptions">
+  Either a numeric status code or an options object. Defaults to `302`.
+</ParamField>
+
+### RedirectOptions
+
+<ParamField path="status" type="number" default="302">
+  HTTP status code for the redirect.
+</ParamField>
+
+<ParamField path="replace" type="boolean" default="false">
+  When `true`, the browser replaces the current history entry during client-side navigation (uses `history.replaceState` instead of `history.pushState`). Does not affect the HTTP status code.
+</ParamField>
+
+**Examples**
+
+```ts
+import { redirect, type RouteHandler } from '@devlusoft/devix'
+
+// Temporary redirect (302 — default)
+export const GET: RouteHandler = async (ctx, req) => {
+  return redirect('/login')
+}
+```
+
+```ts
+// Replace browser history entry during client navigation
+export const GET: RouteHandler = async (ctx, req) => {
+  return redirect('/new-path', { replace: true })
+}
+```
+
+```ts
+// Explicit status code (e.g. 307 Temporary Redirect)
+export const GET: RouteHandler = async (ctx, req) => {
+  return redirect('/dashboard', 307)
+}
+```
+
+---
+
+## Cookie helpers
+
+```ts
+import { getCookie, setCookie, deleteCookie } from '@devlusoft/devix'
+```
+
+### getCookie(req, name)
+
+Reads a cookie value from the incoming request.
+
+**Signature**
+
+```ts
+function getCookie(req: Request, name: string): string | undefined
+```
+
+<ParamField path="req" type="Request" required>
+  The native `Request` object.
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  The cookie name to look up.
+</ParamField>
+
+<ResponseField name="returns" type="string | undefined">
+  The decoded cookie value, or `undefined` if the cookie is not present.
+</ResponseField>
+
+### setCookie(headers, name, value, options?)
+
+Appends a `Set-Cookie` header to a `Headers` object.
+
+**Signature**
+
+```ts
+function setCookie(
+  headers: Headers,
+  name: string,
+  value: string,
+  options?: CookieOptions,
+): void
+```
+
+<ParamField path="headers" type="Headers" required>
+  The response `Headers` object to write to.
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Cookie name.
+</ParamField>
+
+<ParamField path="value" type="string" required>
+  Cookie value. Automatically URL-encoded.
+</ParamField>
+
+<ParamField path="options" type="CookieOptions">
+  Cookie attributes (see below).
+</ParamField>
+
+### deleteCookie(headers, name)
+
+Deletes a cookie by setting its value to empty and `Max-Age` to `0`.
+
+**Signature**
+
+```ts
+function deleteCookie(
+  headers: Headers,
+  name: string,
+  options?: Pick<CookieOptions, 'path' | 'domain'>,
+): void
+```
+
+### CookieOptions
+
+<ResponseField name="httpOnly" type="boolean">
+  Prevents client-side JavaScript from accessing the cookie.
+</ResponseField>
+
+<ResponseField name="secure" type="boolean">
+  Restricts the cookie to HTTPS connections.
+</ResponseField>
+
+<ResponseField name="sameSite" type="'Strict' | 'Lax' | 'None'">
+  Controls cross-site cookie sending behavior.
+</ResponseField>
+
+<ResponseField name="maxAge" type="number">
+  Cookie lifetime in seconds.
+</ResponseField>
+
+<ResponseField name="expires" type="Date">
+  Absolute expiry date.
+</ResponseField>
+
+<ResponseField name="path" type="string">
+  URL path scope. Defaults to `'/'`.
+</ResponseField>
+
+<ResponseField name="domain" type="string">
+  Domain scope for the cookie.
+</ResponseField>
+
+**Example**
+
+```ts
+import { getCookie, setCookie, deleteCookie, json, type RouteHandler } from '@devlusoft/devix'
+
+export const POST: RouteHandler = async (ctx, req) => {
+  const { email, password } = await req.json()
+  const token = await createSession(email, password)
+  if (!token) return json({ error: 'Invalid credentials' }, 401)
+
+  const res = json({ ok: true })
+  setCookie(res.headers, 'session', token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'Lax',
+    maxAge: 60 * 60 * 24 * 7,  // 7 days
+  })
+  return res
+}
+
+export const DELETE: RouteHandler = async (ctx, req) => {
+  const res = json({ ok: true })
+  deleteCookie(res.headers, 'session')
+  return res
+}
+```
+
+---
+
+## DevixError
+
+Throw `DevixError` inside a loader, guard, or handler to return a controlled HTTP error response. Unexpected errors return `500` automatically.
+
+**Signature**
+
+```ts
+class DevixError extends Error {
+  statusCode: number
+  constructor(statusCode: number, message: string)
+}
+```
+
+<ParamField path="statusCode" type="number" required>
+  The HTTP status code to send (e.g. `400`, `401`, `403`, `404`).
+</ParamField>
+
+<ParamField path="message" type="string" required>
+  A human-readable error message included in the response.
+</ParamField>
+
+**Examples**
+
+```ts
+import { DevixError, type RouteHandler } from '@devlusoft/devix'
+
+export const GET: RouteHandler = async (ctx) => {
+  const post = await db.posts.find(ctx.params.id)
+  if (!post) throw new DevixError(404, 'Post not found')
+  return post
+}
+```
+
+```ts
+import { createHandler, json, DevixError } from '@devlusoft/devix'
+
+export const POST = createHandler(async (body: { email: string }) => {
+  if (!body.email) throw new DevixError(400, 'email is required')
+  return json({ ok: true })
+})
+```
+
+<Warning>
+  Unexpected thrown values that are not `DevixError` instances result in a `500` response. Only `DevixError` maps to a specific status code.
+</Warning>

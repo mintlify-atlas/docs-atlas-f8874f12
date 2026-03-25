@@ -1,0 +1,194 @@
+---
+title: "Project structure"
+description: "Understand how devix organizes your application"
+---
+
+devix uses a file-system-based structure. The `app/` directory is the root of your application. Files placed in `app/pages/` become routes, and files in `app/api/` become API endpoints — no configuration required.
+
+## Directory layout
+
+```
+my-app/
+├── app/
+│   ├── pages/
+│   │   ├── layout.tsx          # Root layout (wraps all pages)
+│   │   ├── index.tsx           # → /
+│   │   ├── about.tsx           # → /about
+│   │   └── blog/
+│   │       ├── layout.tsx      # Nested layout (wraps blog pages)
+│   │       ├── index.tsx       # → /blog
+│   │       └── [slug].tsx      # → /blog/:slug
+│   └── api/
+│       ├── middleware.ts       # Global API middleware
+│       └── posts/
+│           └── [id].ts         # → GET/POST /api/posts/:id
+├── public/                     # Static assets (served as-is)
+├── devix.config.ts             # devix configuration
+├── tsconfig.json
+└── package.json
+```
+
+<Note>
+  The `app/` directory name is the default. You can change it with the `appDir` option in `devix.config.ts`.
+</Note>
+
+---
+
+## Pages (`app/pages/`)
+
+Every `.tsx` file inside `app/pages/` becomes a page route. The mapping follows the file path directly:
+
+| File | Route |
+|---|---|
+| `app/pages/index.tsx` | `/` |
+| `app/pages/about.tsx` | `/about` |
+| `app/pages/blog/index.tsx` | `/blog` |
+| `app/pages/blog/new.tsx` | `/blog/new` |
+
+### Dynamic segments
+
+Wrap a filename segment in square brackets to create a dynamic route. The segment name becomes the param key:
+
+| File | Route |
+|---|---|
+| `app/pages/blog/[slug].tsx` | `/blog/:slug` |
+| `app/pages/[category]/[id].tsx` | `/:category/:id` |
+
+<Tip>
+  Static routes always take priority over dynamic routes. `/blog/new` will always match `blog/new.tsx` before `blog/[slug].tsx`.
+</Tip>
+
+---
+
+## API routes (`app/api/`)
+
+Files inside `app/api/` become API endpoints. Export named functions (`GET`, `POST`, `DELETE`, etc.) using `createHandler`:
+
+```ts app/api/posts/[id].ts
+import { createHandler, json } from '@devlusoft/devix'
+
+export const GET = createHandler(async () => {
+  return json({ hello: 'world' })
+})
+
+export const POST = createHandler(async (body: { name: string }) => {
+  const item = await db.items.create(body)
+  return json(item, 201)
+})
+
+export const DELETE = createHandler(async () => null)  // 204
+```
+
+<Note>
+  `createHandler` provides end-to-end type inference. The request body and response types are automatically inferred when using `$fetch`.
+</Note>
+
+---
+
+## Reserved filenames
+
+Certain filenames have special meaning inside `app/pages/`:
+
+| Filename | Purpose |
+|---|---|
+| `layout.tsx` | Layout that wraps all pages in the same directory and its subdirectories |
+| `error.tsx` | Error boundary for the directory _(coming soon)_ |
+
+### layout.tsx
+
+A `layout.tsx` file wraps all sibling pages and nested layouts. The root layout at `app/pages/layout.tsx` wraps every page in the app.
+
+```tsx app/pages/layout.tsx
+import type { LayoutProps } from '@devlusoft/devix'
+
+export default function RootLayout({ children }: LayoutProps) {
+  return (
+    <div>
+      <nav>...</nav>
+      {children}
+    </div>
+  )
+}
+```
+
+Layouts can be nested. A `layout.tsx` inside `app/pages/blog/` wraps only the pages inside that directory, and is itself wrapped by the parent layout:
+
+```
+app/pages/
+├── layout.tsx          ← wraps everything
+└── blog/
+    ├── layout.tsx      ← wraps only blog pages
+    ├── index.tsx
+    └── [slug].tsx
+```
+
+<Tip>
+  You can export a `lang` constant from `layout.tsx` to set the `lang` attribute on the HTML document (e.g., `export const lang = 'en'`).
+</Tip>
+
+---
+
+## devix.config.ts
+
+The `devix.config.ts` file at the root of your project is the single configuration entry point. Use `defineConfig` for full TypeScript type inference:
+
+```ts devix.config.ts
+import { defineConfig } from '@devlusoft/devix/config'
+
+export default defineConfig({
+  port: 3000,              // Dev and production server port (default: 3000)
+  host: false,             // Bind to 0.0.0.0 (default: false)
+  appDir: 'app',           // Application directory (default: 'app')
+  publicDir: 'public',     // Static assets directory (default: 'public')
+  output: 'server',        // 'server' | 'static' (default: 'server')
+  loaderTimeout: 10_000,   // Loader timeout in ms (default: 10000)
+  css: ['./app/styles/global.css'],  // Global CSS files
+  envPrefix: 'PUBLIC_',    // Expose env vars with this prefix to the client
+  vite: {},                // Extend Vite configuration
+})
+```
+
+### Configuration options
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `port` | `number` | `3000` | Server port for dev and production |
+| `host` | `string \| boolean` | `false` | Bind to `0.0.0.0` when `true` |
+| `appDir` | `string` | `'app'` | Root directory for pages and API routes |
+| `publicDir` | `string` | `'public'` | Directory for static assets |
+| `output` | `'server' \| 'static'` | `'server'` | Output mode: SSR server or pre-rendered static files |
+| `loaderTimeout` | `number \| string` | `10000` | Timeout for `loader` functions in milliseconds |
+| `css` | `string[]` | — | Global CSS files to include on every page |
+| `envPrefix` | `string \| string[]` | — | Prefix for environment variables exposed to the client |
+| `html` | `{ lang?: string }` | — | Default HTML attributes |
+| `vite` | `UserConfig` | — | Vite configuration to merge with devix defaults |
+
+<Note>
+  You do not need a `vite.config.ts`. All Vite configuration goes through the `vite` field in `devix.config.ts`.
+</Note>
+
+---
+
+## public/ directory
+
+Files placed in `public/` are served as static assets at the root path. For example, `public/logo.png` is accessible at `/logo.png`.
+
+---
+
+## TypeScript
+
+devix generates types into a `.devix/` directory at build time. Your `tsconfig.json` should include it:
+
+```json tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "lib": ["ESNext", "DOM"]
+  },
+  "include": ["app", "devix.config.ts", ".devix"]
+}
+```

@@ -1,0 +1,455 @@
+---
+title: "Utilities"
+description: "Utility functions and types exported from @devlusoft/devix"
+---
+
+## $fetch
+
+A type-safe HTTP client that infers the request body type and response type from your `createHandler` route definitions. It serializes the request body as JSON and parses JSON responses automatically.
+
+**Import**
+
+```ts
+import { $fetch, FetchError } from '@devlusoft/devix'
+```
+
+**Signature**
+
+```ts
+async function $fetch<
+  P extends ApiPath = ApiPath,
+  M extends HttpMethod = 'GET',
+>(path: P, options?: FetchOptions<M, P>): Promise<InferResult<M, P>>
+```
+
+When route handlers are registered in the `ApiRoutes` interface (via `createHandler`), TypeScript resolves `InferResult<M, P>` to the handler's return type and `FetchOptions.body` to the handler's accepted body type. No explicit type annotations are needed at the call site.
+
+**Options**
+
+<ParamField path="method" type="'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'" default="'GET'">
+  HTTP method for the request.
+</ParamField>
+
+<ParamField path="body" type="object">
+  Request body. Automatically serialized as JSON. The type is inferred from the matching `createHandler` definition when available.
+</ParamField>
+
+<ParamField path="headers" type="HeadersInit">
+  Additional HTTP headers to include. A `Content-Type: application/json` header is added automatically when a `body` is present.
+</ParamField>
+
+<ParamField path="signal" type="AbortSignal">
+  An `AbortSignal` for cancelling the request.
+</ParamField>
+
+**Usage**
+
+<Tabs>
+  <Tab title="Basic GET">
+    ```ts
+    const user = await $fetch('/api/users/42')
+    ```
+  </Tab>
+  <Tab title="POST with body">
+    ```ts
+    const result = await $fetch('/api/posts', {
+      method: 'POST',
+      body: { title: 'Hello world', published: true },
+    })
+    ```
+  </Tab>
+  <Tab title="Custom headers">
+    ```ts
+    const data = await $fetch('/api/protected', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    ```
+  </Tab>
+</Tabs>
+
+**End-to-end type safety with `createHandler`**
+
+Define a handler in your API route file:
+
+```ts
+// app/api/posts/route.ts
+import { createHandler, json } from '@devlusoft/devix'
+
+export const POST = createHandler(async (body: { title: string }) => {
+  const post = await db.posts.create({ data: body })
+  return json({ id: post.id, title: post.title })
+})
+```
+
+Then call it from the client. Both `body` and the return type are inferred:
+
+```ts
+// Somewhere in your component or client code
+import { $fetch } from '@devlusoft/devix'
+
+const post = await $fetch('/api/posts', {
+  method: 'POST',
+  body: { title: 'My new post' }, // typed as { title: string }
+})
+// post is typed as { id: string | number; title: string }
+```
+
+<Tip>
+  Wrap `$fetch` calls in a `try/catch` and check `error instanceof FetchError` to handle HTTP errors with typed access to `status` and `statusText`.
+</Tip>
+
+---
+
+## FetchError
+
+Thrown by `$fetch` when the server responds with a non-2xx status code.
+
+**Signature**
+
+```ts
+class FetchError extends Error {
+  readonly status: number
+  readonly statusText: string
+  readonly response: Response
+
+  constructor(status: number, statusText: string, response: Response)
+}
+```
+
+**Properties**
+
+<ResponseField name="status" type="number">
+  The HTTP status code (e.g., `404`, `500`).
+</ResponseField>
+
+<ResponseField name="statusText" type="string">
+  The HTTP status text (e.g., `"Not Found"`, `"Internal Server Error"`).
+</ResponseField>
+
+<ResponseField name="response" type="Response">
+  The raw `Response` object, useful for reading the error body or headers.
+</ResponseField>
+
+**Usage**
+
+```ts
+import { $fetch, FetchError } from '@devlusoft/devix'
+
+try {
+  const data = await $fetch('/api/resource')
+} catch (error) {
+  if (error instanceof FetchError) {
+    console.error(`Request failed: ${error.status} ${error.statusText}`)
+    const body = await error.response.json()
+  }
+}
+```
+
+---
+
+## redirect
+
+Creates a `Redirect` value that can be returned from a loader function or guard to perform a server-side redirect. When returned from a loader during client-side navigation, devix performs a client-side redirect without a full page reload.
+
+**Import**
+
+```ts
+import { redirect } from '@devlusoft/devix'
+```
+
+**Signature**
+
+```ts
+function redirect(url: string, statusOrOptions?: number | RedirectOptions): Redirect
+
+interface RedirectOptions {
+  status?: number   // HTTP status code, defaults to 302
+  replace?: boolean // replace history entry instead of pushing
+}
+
+interface Redirect {
+  readonly url: string
+  readonly status: number
+  readonly replace: boolean
+}
+```
+
+**Parameters**
+
+<ParamField path="url" type="string" required>
+  The URL or pathname to redirect to.
+</ParamField>
+
+<ParamField path="statusOrOptions" type="number | RedirectOptions">
+  Either a numeric HTTP status code (e.g., `301`) or a `RedirectOptions` object. Defaults to `302`.
+</ParamField>
+
+<ParamField path="statusOrOptions.status" type="number" default="302">
+  The HTTP redirect status code.
+</ParamField>
+
+<ParamField path="statusOrOptions.replace" type="boolean" default="false">
+  When `true`, the redirect replaces the current browser history entry during client-side navigation.
+</ParamField>
+
+**Usage**
+
+```ts
+// app/dashboard/page.tsx
+import { redirect } from '@devlusoft/devix'
+
+export async function loader({ request }) {
+  const session = await getSession(request)
+
+  if (!session) {
+    return redirect('/login')
+  }
+
+  if (session.needsOnboarding) {
+    return redirect('/onboarding', { replace: true })
+  }
+
+  return { user: session.user }
+}
+```
+
+---
+
+## Cookie utilities
+
+`getCookie`, `setCookie`, and `deleteCookie` are re-exported from `@devlusoft/devix` for use in loaders, guards, and API route handlers.
+
+```ts
+import { getCookie, setCookie, deleteCookie } from '@devlusoft/devix'
+```
+
+See the [cookies and auth guide](/guides/cookies-auth) for full usage examples.
+
+---
+
+## Type exports
+
+The following types are exported from `@devlusoft/devix` for use when building pages, layouts, loaders, and API routes.
+
+<AccordionGroup>
+  <Accordion title="PageProps">
+    Props passed to every page component. The `data` prop type is inferred from the loader return type. The `params` prop type can be passed as the first or second generic.
+
+    ```ts
+    interface PageProps<TDataOrParams = unknown, TParams = Record<string, string>> {
+      data: IsParams<TDataOrParams> extends true ? unknown : InferLoaderData<TDataOrParams>
+      params: IsParams<TDataOrParams> extends true ? TDataOrParams : TParams
+      url: string
+    }
+    ```
+
+    Pass your loader function type as the first generic to get a fully typed `data` prop:
+
+    ```tsx
+    import type { PageProps } from '@devlusoft/devix'
+    import type { loader } from './page'
+
+    export default function Page({ data, params, url }: PageProps<typeof loader>) {
+      return <h1>{data.title}</h1>
+    }
+    ```
+
+    Pass a params object type directly (without a loader) for typed params only:
+
+    ```tsx
+    import type { PageProps } from '@devlusoft/devix'
+
+    export default function Page({ params }: PageProps<{ slug: string }>) {
+      return <h1>{params.slug}</h1>
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="LayoutProps">
+    Props passed to every layout component.
+
+    ```ts
+    interface LayoutProps<TDataOrParams = unknown, TParams = Record<string, string>> {
+      children: React.ReactNode
+      data: InferLoaderData<TDataOrParams>
+      params: TParams
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="LoaderContext">
+    The context object passed to every `loader` and `guard` function.
+
+    ```ts
+    interface LoaderContext<TParams = Record<string, string>> {
+      params: TParams
+      request: Request
+      guardData: unknown
+    }
+    ```
+
+    Use `LoaderContextWithGuard` when your page has a guard and you need typed `guardData`:
+
+    ```ts
+    import type { LoaderContextWithGuard } from '@devlusoft/devix'
+    import type { guard } from './page'
+
+    export async function loader(ctx: LoaderContextWithGuard<typeof guard>) {
+      // ctx.guardData is typed from the guard's return value
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="NavigateOptions">
+    Options accepted by the `navigate` function returned from `useNavigate()`.
+
+    ```ts
+    interface NavigateOptions {
+      replace?: boolean
+      viewTransition?: boolean
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="RouteHandler">
+    The function signature for classic API route handlers. Use it when you need direct access to `ctx` and `req`.
+
+    ```ts
+    type RouteHandler = (ctx: RouteContext, req: Request) => Promise<RouteResult> | RouteResult
+    type RouteResult = Response | Record<string, unknown> | unknown[] | null | void
+    ```
+
+    ```ts
+    import { json, type RouteHandler } from '@devlusoft/devix'
+
+    export const GET: RouteHandler = async (ctx, req) => {
+      return json({ id: ctx.params.id })
+    }
+
+    export const POST: RouteHandler = async (ctx, req) => {
+      const body = await req.json()
+      return json(body, 201)
+    }
+
+    export const DELETE: RouteHandler = async (ctx) => null  // 204
+    ```
+
+    For end-to-end type inference, use `createHandler` instead. See [createHandler](/api/create-handler).
+  </Accordion>
+
+  <Accordion title="Metadata and Viewport">
+    Types for static and dynamic page metadata.
+
+    ```ts
+    interface Metadata {
+      title?: string
+      description?: string
+      keywords?: string[]
+      canonical?: string
+      robots?: string
+      og?: {
+        title?: string
+        description?: string
+        image?: string
+        type?: 'website' | 'article' | 'product'
+        url?: string
+      }
+      twitter?: {
+        card?: 'summary' | 'summary_large_image'
+        title?: string
+        description?: string
+        image?: string
+        creator?: string
+      }
+      alternates?: Record<string, string>
+      icons?: string | MetadataIcon | MetadataIcon[]
+    }
+
+    interface Viewport {
+      width?: string | number
+      initialScale?: number
+      maximumScale?: number
+      userScalable?: boolean
+      themeColor?: string
+    }
+    ```
+
+    Export `metadata` as a static object or `generateMetadata` as an async function from any page or layout module:
+
+    ```ts
+    import type { Metadata } from '@devlusoft/devix'
+
+    export const metadata: Metadata = {
+      title: 'Home',
+      description: 'Welcome to my site',
+      og: { type: 'website', image: '/og.png' },
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="ErrorProps">
+    Props received by a custom error page component. Export a default component with this type from `app/pages/error.tsx` to customize error rendering.
+
+    ```ts
+    interface ErrorProps {
+      statusCode: number
+      message?: string
+    }
+    ```
+
+    ```tsx
+    import type { ErrorProps } from '@devlusoft/devix'
+
+    export default function ErrorPage({ statusCode, message }: ErrorProps) {
+      return (
+        <div>
+          <h1>{statusCode}</h1>
+          {message && <p>{message}</p>}
+        </div>
+      )
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="ApiRoutes">
+    An empty interface used for module augmentation. Augment it to register your route handlers and enable end-to-end type inference in `$fetch`.
+
+    ```ts
+    export interface ApiRoutes { }
+    ```
+
+    devix's Vite plugin generates the augmentation automatically when you use `createHandler`. You typically do not need to write this manually — it is documented here for reference when debugging type inference issues.
+
+    If you need to manually register a route for `$fetch` type checking:
+
+    ```ts
+    import type { DevixHandler } from '@devlusoft/devix'
+
+    declare module '@devlusoft/devix' {
+      interface ApiRoutes {
+        'POST /api/auth/login': DevixHandler<{ email: string; password: string }, { ok: boolean }>
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="LoaderFunction and GuardFunction">
+    Generic type aliases for loader and guard functions. Useful when extracting loaders and guards into separate files.
+
+    ```ts
+    type LoaderFunction<TData = unknown, TParams = Record<string, string>> =
+      (ctx: LoaderContext<TParams>) => Promise<TData | Redirect | void> | TData | Redirect | void
+
+    type GuardFunction<TParams = Record<string, string>> =
+      (ctx: LoaderContext<TParams>) => Promise<string | Redirect | Record<string, unknown> | null> | string | Redirect | Record<string, unknown> | null
+    ```
+
+    ```ts
+    import type { LoaderFunction } from '@devlusoft/devix'
+
+    export const loader: LoaderFunction<{ title: string }> = async ({ params }) => {
+      return db.posts.findBySlug(params.slug)
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
